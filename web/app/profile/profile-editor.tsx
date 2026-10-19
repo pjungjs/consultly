@@ -62,7 +62,15 @@ export default function ProfileEditor() {
         </div>
         <Roles consultant={profile.consultant} />
       </div>
-      <ClientDetails profile={profile} />
+      <ClientDetails
+        profile={profile}
+        onSaved={(details) =>
+          setState({
+            kind: "ready",
+            profile: { ...profile, ...details, consultant: profile.consultant && { ...profile.consultant, ...details } },
+          })
+        }
+      />
       {profile.consultant ? (
         <ConsultantDetails key={profile.consultant.id} consultant={profile.consultant} onChange={setConsultant} />
       ) : (
@@ -129,7 +137,8 @@ function ZoneSelect({ name, value }: { name: string; value: string }) {
   );
 }
 
-function ClientDetails({ profile }: { profile: Profile }) {
+/** Name and time zone for the whole account; a consultant's listing and weekly hours use them too. */
+function ClientDetails({ profile, onSaved }: { profile: Profile; onSaved: (details: { name: string; timezone: string }) => void }) {
   const [message, setMessage] = useState<Message>(null);
   const browserZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
   // React resets a form to its default values after the action runs, so the defaults must be the saved values.
@@ -139,28 +148,35 @@ function ClientDetails({ profile }: { profile: Profile }) {
     setMessage(null);
     try {
       const next = await save<{ name: string; timezone: string }>("profile", { name: form.get("name"), timezone: form.get("timezone") });
+      const movedZone = next.timezone !== saved.timezone;
       setSaved(next);
+      onSaved(next);
       window.dispatchEvent(new Event(PROFILE_UPDATED)); // the account menu shows the new initial
-      setMessage({ kind: "ok", text: "Saved. Your name is filled in for you when you book." });
+      setMessage({
+        kind: "ok",
+        text:
+          profile.consultant && movedZone
+            ? `Saved. Your weekly hours now run in ${cityFromZone(next.timezone)} time; check the Availability tab for sessions that no longer fit.`
+            : "Saved.",
+      });
     } catch (err) {
       setMessage({ kind: "error", text: (err as Error).message });
     }
   }
 
   return (
-    <section className="profile-client space-y-4">
-      <h2 className="font-display text-2xl font-semibold">Client profile</h2>
+    <section className="profile-details space-y-4">
       <form action={submit} className="profile-client-form grid gap-4 sm:grid-cols-2">
         <label className="flex flex-col gap-1 text-sm">
           Name
           <input key={saved.name} name="name" required maxLength={100} defaultValue={saved.name} autoComplete="name" className={field} />
         </label>
         <label className="flex flex-col gap-1 text-sm">
-          Time zone for emails
+          Time zone
           <ZoneSelect key={saved.timezone} name="timezone" value={saved.timezone} />
         </label>
         <div className="flex flex-wrap items-center gap-4 sm:col-span-2">
-          <button className="rounded-sm bg-ink px-5 py-2.5 text-sm font-medium text-paper">Save details</button>
+          <button className="rounded-sm bg-ink px-5 py-2.5 text-sm font-medium text-paper">Save</button>
           <Notice message={message} />
         </div>
       </form>
@@ -191,24 +207,15 @@ function ConsultantDetails({ consultant, onChange }: { consultant: ConsultantPro
     setMessage(null);
     try {
       const next = await save<ConsultantProfile>("consultant/profile", {
-        name: form.get("name"),
         headline: form.get("headline"),
         bio: form.get("bio"),
         category: form.get("category"),
         rateCents: Math.round(Number(form.get("rate")) * 100),
         slotMinutes: Number(form.get("slotMinutes")),
-        timezone: form.get("timezone"),
       });
-      const movedZone = next.timezone !== saved.timezone;
       setSaved(next);
       onChange(next);
-      window.dispatchEvent(new Event(PROFILE_UPDATED));
-      setMessage({
-        kind: "ok",
-        text: movedZone
-          ? `Saved. Your weekly hours now run in ${cityFromZone(next.timezone)} time; check the Availability tab for sessions that no longer fit.`
-          : "Saved. Clients see the changes right away; existing bookings keep their price.",
-      });
+      setMessage({ kind: "ok", text: "Saved. Clients see the changes right away; existing bookings keep their price." });
     } catch (err) {
       setMessage({ kind: "error", text: (err as Error).message });
     }
@@ -236,10 +243,6 @@ function ConsultantDetails({ consultant, onChange }: { consultant: ConsultantPro
       </div>
       <form action={submit} className="profile-consultant-form grid gap-4 sm:grid-cols-2">
         <label className="flex flex-col gap-1 text-sm">
-          Display name
-          <input name="name" required maxLength={100} defaultValue={saved.name} className={field} />
-        </label>
-        <label className="flex flex-col gap-1 text-sm">
           Category
           <select name="category" defaultValue={saved.category} className={field}>
             {CATEGORIES.map((c) => (
@@ -266,12 +269,8 @@ function ConsultantDetails({ consultant, onChange }: { consultant: ConsultantPro
             <option value={60}>60 minutes</option>
           </select>
         </label>
-        <label className="flex flex-col gap-1 text-sm">
-          Your time zone
-          <ZoneSelect name="timezone" value={saved.timezone} />
-        </label>
         <div className="flex flex-wrap items-center gap-4 sm:col-span-2">
-          <button className="rounded-sm bg-ink px-5 py-2.5 text-sm font-medium text-paper">Save public profile</button>
+          <button className="rounded-sm bg-ink px-5 py-2.5 text-sm font-medium text-paper">Save consultant profile</button>
           <Notice message={message} />
         </div>
       </form>
@@ -283,7 +282,6 @@ function ConsultantDetails({ consultant, onChange }: { consultant: ConsultantPro
 function BecomeConsultant({ name, onCreated }: { name: string | null; onCreated: (c: ConsultantProfile) => void }) {
   const [open, setOpen] = useState(false);
   const [message, setMessage] = useState<Message>(null);
-  const browserZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
   async function submit(form: FormData) {
     setMessage(null);
@@ -293,13 +291,11 @@ function BecomeConsultant({ name, onCreated }: { name: string | null; onCreated:
         credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          name: form.get("name"),
           headline: form.get("headline"),
           bio: form.get("bio"),
           category: form.get("category"),
           rateCents: Math.round(Number(form.get("rate")) * 100),
           slotMinutes: Number(form.get("slotMinutes")),
-          timezone: form.get("timezone"),
         }),
       });
       const json = await res.json();
@@ -328,12 +324,10 @@ function BecomeConsultant({ name, onCreated }: { name: string | null; onCreated:
   return (
     <section className="profile-become-consultant space-y-4">
       <h2 className="font-display text-2xl font-semibold">Your consultant profile</h2>
-      <p className="text-sm text-muted">This is what clients see. You can change all of it later.</p>
+      <p className="text-sm text-muted">
+        This is what clients see, under your name{name ? ` (${name})` : ""} and time zone from above. You can change all of it later.
+      </p>
       <form action={submit} className="profile-become-consultant-form grid gap-4 sm:grid-cols-2">
-        <label className="flex flex-col gap-1 text-sm">
-          Display name
-          <input name="name" required maxLength={100} defaultValue={name ?? ""} className={field} />
-        </label>
         <label className="flex flex-col gap-1 text-sm">
           Category
           <select name="category" className={field}>
@@ -360,10 +354,6 @@ function BecomeConsultant({ name, onCreated }: { name: string | null; onCreated:
             <option value={30}>30 minutes</option>
             <option value={60}>60 minutes</option>
           </select>
-        </label>
-        <label className="flex flex-col gap-1 text-sm">
-          Your time zone
-          <ZoneSelect name="timezone" value={browserZone} />
         </label>
         <div className="flex flex-wrap items-center gap-4 sm:col-span-2">
           <button className="rounded-sm bg-ink px-5 py-2.5 text-sm font-medium text-paper">Create consultant profile</button>

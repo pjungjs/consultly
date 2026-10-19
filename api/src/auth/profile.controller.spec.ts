@@ -1,4 +1,8 @@
-import { ConflictException, ForbiddenException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+} from '@nestjs/common';
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
 import { listingStatus } from './listing-status.js';
@@ -21,21 +25,21 @@ const row = (over: Record<string, unknown> = {}) => ({
   ...over,
 });
 const form = {
-  name: '  Mina Park ',
   headline: 'Brand strategy',
   bio: 'Ten years in brand.',
   category: 'Strategy',
   rateCents: 12000,
-  timezone: 'Europe/Paris',
   slotMinutes: 60,
 };
 
 function setup() {
   const prisma = {
+    $transaction: vi.fn((ops: unknown[]) => Promise.all(ops)),
     consultant: {
       findUnique: vi.fn().mockResolvedValue(null),
       create: vi.fn().mockResolvedValue(row()),
       update: vi.fn(),
+      updateMany: vi.fn().mockResolvedValue({ count: 0 }),
     },
     client: {
       update: vi
@@ -45,7 +49,9 @@ function setup() {
   };
   const auth = {
     emailFor: vi.fn().mockResolvedValue('mina@example.com'),
-    ensureClient: vi.fn().mockResolvedValue({ name: 'Mina', timezone: null }),
+    ensureClient: vi
+      .fn()
+      .mockResolvedValue({ name: 'Mina Park', timezone: 'Europe/Paris' }),
     consultantFor: vi.fn().mockResolvedValue({ id: 'c9' }),
   };
   return {
@@ -70,28 +76,40 @@ describe('listingStatus', () => {
 });
 
 describe('ProfileController', () => {
-  it('saves the client name trimmed, creating the client record first if needed', async () => {
+  it('saves one name and time zone for the account, and for its consultant listing too', async () => {
     const { controller, prisma, auth } = setup();
     await controller.saveClient(req, {
       name: '  Mina ',
       timezone: 'Asia/Seoul',
     });
     expect(auth.ensureClient).toHaveBeenCalledWith('mina@example.com');
-    expect(prisma.client.update).toHaveBeenCalledWith({
+    const change = {
       where: { email: 'mina@example.com' },
       data: { name: 'Mina', timezone: 'Asia/Seoul' },
-    });
+    };
+    expect(prisma.client.update).toHaveBeenCalledWith(change);
+    expect(prisma.consultant.updateMany).toHaveBeenCalledWith(change);
   });
 
-  it('lets a client become a consultant, hidden until weekly hours are set', async () => {
+  it('lets a client become a consultant under their profile name and zone, hidden until weekly hours are set', async () => {
     const { controller, prisma } = setup();
     const created = await controller.becomeConsultant(req, form);
     expect(prisma.consultant.create.mock.calls[0][0].data).toMatchObject({
       email: 'mina@example.com',
       name: 'Mina Park',
+      timezone: 'Europe/Paris',
     });
     expect(created).toMatchObject({ id: 'c9', status: 'needs-hours' });
     expect(created).not.toHaveProperty('_count');
+  });
+
+  it('asks for a profile name first', async () => {
+    const { controller, prisma, auth } = setup();
+    auth.ensureClient.mockResolvedValue({ name: null, timezone: null });
+    await expect(controller.becomeConsultant(req, form)).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
+    expect(prisma.consultant.create).not.toHaveBeenCalled();
   });
 
   it('refuses a second consultant profile for the same email', async () => {
@@ -130,14 +148,13 @@ describe('ConsultantProfileDto', () => {
     expect(await errors({})).toEqual([]);
   });
 
-  it('rejects unknown categories, out-of-range prices and fake time zones', async () => {
+  it('rejects unknown categories and out-of-range prices', async () => {
     expect(
       await errors({
         category: 'Cooking',
         rateCents: 500,
-        timezone: 'Mars/Base',
       }),
-    ).toEqual(['category', 'rateCents', 'timezone']);
+    ).toEqual(['category', 'rateCents']);
     expect(await errors({ rateCents: 100_001 })).toEqual(['rateCents']);
   });
 });

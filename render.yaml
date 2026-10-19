@@ -12,7 +12,8 @@ services:
     runtime: node
     plan: free
     rootDir: api
-    buildCommand: npm ci && npm run build && npx prisma migrate deploy
+    # --include=dev: NODE_ENV=production would otherwise skip the build tools (Nest CLI, Prisma, TypeScript).
+    buildCommand: npm ci --include=dev && npm run build && npx prisma migrate deploy
     startCommand: node dist/main.js
     healthCheckPath: /health
     envVars:
@@ -52,7 +53,7 @@ services:
     plan: free
     rootDir: ai
     buildCommand: pip install uv && uv sync --frozen --no-dev
-    startCommand: uv run uvicorn ai.main:app --host 0.0.0.0 --port $PORT
+    startCommand: uv run --no-dev uvicorn ai.main:app --host 0.0.0.0 --port $PORT # --no-dev: skip test tools
     healthCheckPath: /health
     envVars:
       - fromGroup: consultly-shared
