@@ -1,0 +1,66 @@
+# Render blueprint: the API and the AI service on Render's free plan. The website goes on Vercel, the database
+# and PDF storage on Supabase. Setting values marked `sync: false` are entered in the Render dashboard, never here.
+envVarGroups:
+  - name: consultly-shared
+    envVars:
+      - key: AI_SERVICE_TOKEN # the API sends it; the AI service refuses requests without it
+        generateValue: true
+
+services:
+  - type: web
+    name: consultly-api
+    runtime: node
+    plan: free
+    rootDir: api
+    buildCommand: npm ci && npm run build && npx prisma migrate deploy
+    startCommand: node dist/main.js
+    healthCheckPath: /health
+    envVars:
+      - fromGroup: consultly-shared
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL # Supabase "Session pooler" connection string
+        sync: false
+      - key: WEB_URL # https://<your-site>.vercel.app
+        sync: false
+      - key: AI_URL # https://consultly-ai.onrender.com
+        sync: false
+      - key: STRIPE_SECRET_KEY # sk_test_...
+        sync: false
+      - key: STRIPE_WEBHOOK_SECRET # from the webhook endpoint in Stripe's dashboard (test mode)
+        sync: false
+      - key: RESEND_API_KEY
+        sync: false
+      - key: EMAIL_FROM
+        value: Consultly <onboarding@resend.dev>
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: SUPABASE_BUCKET
+        value: briefs
+      - key: DEMO_LOGIN
+        value: "true"
+      - key: AI_DAILY_CHAT_LIMIT
+        value: "200"
+      - key: AI_DAILY_BRIEF_LIMIT
+        value: "30"
+
+  - type: web
+    name: consultly-ai
+    runtime: python
+    plan: free
+    rootDir: ai
+    buildCommand: pip install uv && uv sync --frozen --no-dev
+    startCommand: uv run uvicorn ai.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - fromGroup: consultly-shared
+      - key: PYTHON_VERSION
+        value: "3.12.7"
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: CLAUDE_MODEL
+        value: claude-haiku-5-5
+      - key: API_URL # https://consultly-api.onrender.com (for the Help chat's bookings lookup)
+        sync: false

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { API_URL } from "@/lib/api";
+import { apiFetch } from "@/lib/api";
 import { LinkedText } from "@/lib/site-links";
 
 type Mode = "ai" | "demo";
@@ -89,7 +89,7 @@ export default function SupportChat() {
     setBusy(true);
     setError(null);
     try {
-      const res = await fetch(`${API_URL}/support/chat`, {
+      const res = await apiFetch(`/support/chat`, {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
@@ -101,10 +101,10 @@ export default function SupportChat() {
         }),
       });
       const body = await res.json();
-      if (!res.ok) throw new Error(Array.isArray(body.message) ? body.message.join(", ") : body.message);
+      if (!res.ok) throw new Error(Array.isArray(body.message) ? body.message.join(", ") : (body.message ?? ""));
       setMessages([...next, { role: "assistant", content: body.reply, demo: body.mode === "demo", model: body.model, notice: body.notice }]);
     } catch (err) {
-      setError((err as Error).message || "The assistant couldn't be reached.");
+      setError((err as Error).message || null); // empty: a toast already said what went wrong
     }
     setBusy(false);
   }
@@ -179,7 +179,12 @@ export default function SupportChat() {
                 </p>
               ) : (
                 <div key={i} className="support-chat-assistant mr-6 space-y-1">
-                  {m.notice && <p className="text-xs text-muted">{m.notice}</p>}
+                  {m.notice && (
+                    // Why Live AI didn't answer (signed out, daily limit, no key): highlighted so it isn't missed.
+                    <p role="note" className="support-chat-notice w-fit rounded-sm bg-highlight px-2 py-1 text-xs font-medium text-on-highlight">
+                      {m.notice}
+                    </p>
+                  )}
                   {m.demo && !m.notice && <p className="text-xs text-muted">Demo answer</p>}
                   {!m.demo && SHOW_MODEL && m.model && <p className="support-chat-model text-xs text-muted">Live AI · {m.model}</p>}
                   <p className="rounded-sm bg-sheet px-3 py-2 whitespace-pre-wrap">

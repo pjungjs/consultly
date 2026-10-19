@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { API_URL, CATEGORIES, PROFILE_UPDATED, type ConsultantProfile, type Profile } from "@/lib/api";
+import { accountLabel, apiFetch, CATEGORIES, PROFILE_UPDATED, type ConsultantProfile, type Profile } from "@/lib/api";
 import { cityFromZone } from "@/lib/zone";
 
 type State = { kind: "loading" } | { kind: "signed-out" } | { kind: "ready"; profile: Profile };
@@ -12,14 +12,14 @@ type Message = { kind: "ok" | "error"; text: string } | null;
 const ZONES = typeof Intl.supportedValuesOf === "function" ? Intl.supportedValuesOf("timeZone") : [];
 
 async function save<T>(path: string, body: unknown): Promise<T> {
-  const res = await fetch(`${API_URL}/me/${path}`, {
+  const res = await apiFetch(`/me/${path}`, {
     method: "PUT",
     credentials: "include",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
   const json = await res.json();
-  if (!res.ok) throw new Error(Array.isArray(json.message) ? json.message.join(", ") : json.message);
+  if (!res.ok) throw new Error(Array.isArray(json.message) ? json.message.join(", ") : (json.message ?? ""));
   return json;
 }
 
@@ -28,7 +28,7 @@ export default function ProfileEditor() {
   const [state, setState] = useState<State>({ kind: "loading" });
 
   useEffect(() => {
-    fetch(`${API_URL}/me/profile`, { credentials: "include", cache: "no-store" })
+    apiFetch(`/me/profile`, { credentials: "include", cache: "no-store" })
       .then(async (res) => (res.ok ? { kind: "ready" as const, profile: (await res.json()) as Profile } : { kind: "signed-out" as const }))
       .then(setState)
       .catch(() => setState({ kind: "signed-out" }));
@@ -54,7 +54,11 @@ export default function ProfileEditor() {
       <div className="space-y-4">
         <div className="space-y-1">
           <h1 className="font-display text-4xl font-semibold tracking-tight">Profile</h1>
-          <p className="text-sm text-muted">Signed in as {profile.email}. Your email is how you sign in, so it can&apos;t be changed here.</p>
+          <p className="text-sm text-muted">
+            {accountLabel(profile.email) === profile.email
+              ? <>Signed in as {profile.email}. Your email is how you sign in, so it can&apos;t be changed here.</>
+              : <>Signed in as {accountLabel(profile.email)}. Changes stay in your private demo until you reset it.</>}
+          </p>
         </div>
         <Roles consultant={profile.consultant} />
       </div>
@@ -69,9 +73,9 @@ export default function ProfileEditor() {
 }
 
 const STATUS_TEXT = {
-  live: "Your profile is live: clients can find and book you.",
-  "needs-hours": "Your profile is hidden until you set weekly hours.",
-  paused: "Your profile is paused: hidden from clients, no new bookings. Existing bookings stay.",
+  live: "Your consultant profile is live: clients can find and book you.",
+  "needs-hours": "Your consultant profile is hidden until you set weekly hours.",
+  paused: "Your consultant profile is paused: hidden from clients, no new bookings. Existing bookings stay.",
 } as const;
 
 /** Spells out which roles this email has, so it's never a guess. */
@@ -145,7 +149,7 @@ function ClientDetails({ profile }: { profile: Profile }) {
 
   return (
     <section className="profile-client space-y-4">
-      <h2 className="font-display text-2xl font-semibold">Your details</h2>
+      <h2 className="font-display text-2xl font-semibold">Client profile</h2>
       <form action={submit} className="profile-client-form grid gap-4 sm:grid-cols-2">
         <label className="flex flex-col gap-1 text-sm">
           Name
@@ -192,6 +196,7 @@ function ConsultantDetails({ consultant, onChange }: { consultant: ConsultantPro
         bio: form.get("bio"),
         category: form.get("category"),
         rateCents: Math.round(Number(form.get("rate")) * 100),
+        slotMinutes: Number(form.get("slotMinutes")),
         timezone: form.get("timezone"),
       });
       const movedZone = next.timezone !== saved.timezone;
@@ -212,7 +217,7 @@ function ConsultantDetails({ consultant, onChange }: { consultant: ConsultantPro
   return (
     <section className="profile-consultant space-y-4">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h2 className="font-display text-2xl font-semibold">Public profile</h2>
+        <h2 className="font-display text-2xl font-semibold">Consultant profile</h2>
         <Link href={`/consultants/${consultant.id}`} className="text-sm underline">
           View as a client sees it
         </Link>
@@ -255,6 +260,13 @@ function ConsultantDetails({ consultant, onChange }: { consultant: ConsultantPro
           <input name="rate" type="number" required min={10} max={1000} step={5} defaultValue={saved.rateCents / 100} className={field} />
         </label>
         <label className="flex flex-col gap-1 text-sm">
+          Session length
+          <select name="slotMinutes" defaultValue={saved.slotMinutes} className={field}>
+            <option value={30}>30 minutes</option>
+            <option value={60}>60 minutes</option>
+          </select>
+        </label>
+        <label className="flex flex-col gap-1 text-sm">
           Your time zone
           <ZoneSelect name="timezone" value={saved.timezone} />
         </label>
@@ -276,7 +288,7 @@ function BecomeConsultant({ name, onCreated }: { name: string | null; onCreated:
   async function submit(form: FormData) {
     setMessage(null);
     try {
-      const res = await fetch(`${API_URL}/me/consultant`, {
+      const res = await apiFetch(`/me/consultant`, {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
@@ -286,11 +298,12 @@ function BecomeConsultant({ name, onCreated }: { name: string | null; onCreated:
           bio: form.get("bio"),
           category: form.get("category"),
           rateCents: Math.round(Number(form.get("rate")) * 100),
+          slotMinutes: Number(form.get("slotMinutes")),
           timezone: form.get("timezone"),
         }),
       });
       const json = await res.json();
-      if (!res.ok) throw new Error(Array.isArray(json.message) ? json.message.join(", ") : json.message);
+      if (!res.ok) throw new Error(Array.isArray(json.message) ? json.message.join(", ") : (json.message ?? ""));
       window.dispatchEvent(new Event(PROFILE_UPDATED)); // the account menu gains "Dashboard"
       onCreated(json);
     } catch (err) {
@@ -340,6 +353,13 @@ function BecomeConsultant({ name, onCreated }: { name: string | null; onCreated:
         <label className="flex flex-col gap-1 text-sm">
           Price per session (USD)
           <input name="rate" type="number" required min={10} max={1000} step={5} defaultValue={100} className={field} />
+        </label>
+        <label className="flex flex-col gap-1 text-sm">
+          Session length
+          <select name="slotMinutes" defaultValue={60} className={field}>
+            <option value={30}>30 minutes</option>
+            <option value={60}>60 minutes</option>
+          </select>
         </label>
         <label className="flex flex-col gap-1 text-sm">
           Your time zone

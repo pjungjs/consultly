@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import {
-  API_URL,
+  apiFetch,
   formatPrice,
   type Dashboard,
   type DashboardSession,
@@ -21,7 +21,7 @@ type State =
   | { kind: "ready"; data: Dashboard; loadedAt: number };
 
 async function fetchDashboard(): Promise<State> {
-  const res = await fetch(`${API_URL}/me/consultant/dashboard`, {
+  const res = await apiFetch(`/me/consultant/dashboard`, {
     credentials: "include",
     cache: "no-store",
   });
@@ -79,7 +79,7 @@ export default function ConsultantDashboard() {
   const all = [...past].reverse().concat(upcoming); // oldest first
   const listed = day ? all.filter((s) => dayKey(s.startsAt, zone) === day) : list === "upcoming" ? upcoming : past;
   const days = groupByDay(listed, zone);
-  const canCancel = (s: DashboardSession) => new Date(s.startsAt).getTime() > state.loadedAt;
+  const canCancel = (s: DashboardSession) => s.status === "CONFIRMED" && new Date(s.startsAt).getTime() > state.loadedAt;
 
   return (
     <div className="dashboard space-y-10">
@@ -154,7 +154,7 @@ export default function ConsultantDashboard() {
           )}
 
           <SessionCalendar
-            sessions={all}
+            sessions={all.filter((s) => s.status === "CONFIRMED")}
             zone={zone}
             now={state.loadedAt}
             selected={day}
@@ -246,8 +246,7 @@ function SessionRow({
   async function cancel() {
     setBusy(true);
     setError(null);
-    const res = await fetch(
-      `${API_URL}/me/consultant/bookings/${s.id}/cancel`,
+    const res = await apiFetch(`/me/consultant/bookings/${s.id}/cancel`,
       { method: "POST", credentials: "include" },
     );
     const body = await res.json();
@@ -255,14 +254,16 @@ function SessionRow({
     if (!res.ok) return setError(body.message);
     setConfirming(false);
     onCancelled?.(
-      `Cancelled ${s.order.clientName}'s session and refunded ${formatPrice(body.refundedCents)}. They've been emailed.`,
+      `Cancelled ${s.order.clientName}'s session${s.amountCents === 0 ? "" : ` and refunded ${formatPrice(body.refundedCents)}`}. They've been emailed.`,
     );
   }
+
+  const cancelled = s.status === "CANCELLED";
 
   return (
     <li className="dashboard-session space-y-2 py-3">
       <div className="grid gap-1 sm:grid-cols-[6rem_1fr_auto] sm:items-baseline sm:gap-4">
-        <span className="font-semibold">
+        <span className={`font-semibold ${cancelled ? "text-muted line-through" : ""}`}>
           {showDate &&
             `${new Date(s.startsAt).toLocaleDateString(undefined, { month: "short", day: "numeric", timeZone: zone })} `}
           {timeIn(s.startsAt, zone)}
@@ -280,8 +281,16 @@ function SessionRow({
           {theirs
             ? `${timeIn(s.startsAt, s.order.clientTimezone)} for them · `
             : ""}
-          {formatPrice(s.amountCents)}
-          {s.order.brief && (
+          {cancelled ? (
+            // Cancelled sessions stay listed so the consultant sees what changed, like the client does.
+            <span className="font-medium text-red-700 dark:text-red-400">
+              {s.cancelledBy === "CLIENT" ? "Cancelled by client" : "Cancelled by you"}
+              {s.amountCents > 0 && ` · ${formatPrice(s.amountCents)} refunded`}
+            </span>
+          ) : (
+            formatPrice(s.amountCents)
+          )}
+          {s.order.brief && !cancelled && (
             <button onClick={() => setShowBrief(!showBrief)} aria-expanded={showBrief} className="font-medium text-ink underline">
               {showBrief ? "Hide brief" : "Brief"}
             </button>
@@ -304,8 +313,9 @@ function SessionRow({
       {confirming && (
         <div className="dashboard-cancel-confirm flex flex-wrap items-center justify-between gap-3 rounded-sm bg-sheet px-3 py-2 text-sm">
           <span>
-            Cancel this session and refund {formatPrice(s.amountCents)} to{" "}
-            {s.order.clientName}?
+            {s.amountCents === 0
+              ? `Cancel this free session with ${s.order.clientName}?`
+              : `Cancel this session and refund ${formatPrice(s.amountCents)} to ${s.order.clientName}?`}
           </span>
           <span className="flex items-center gap-3">
             <button
@@ -322,7 +332,9 @@ function SessionRow({
             >
               {busy
                 ? "Refunding…"
-                : `Cancel & refund ${formatPrice(s.amountCents)}`}
+                : s.amountCents === 0
+                  ? "Cancel session"
+                  : `Cancel & refund ${formatPrice(s.amountCents)}`}
             </button>
           </span>
           {error && (

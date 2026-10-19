@@ -4,20 +4,41 @@ import {
   ConflictException,
   Get,
   Header,
+  HttpException,
+  HttpStatus,
   Param,
   Post,
+  Req,
 } from '@nestjs/common';
+import type { Request } from 'express';
+import { COOKIE, sessionEmail } from '../auth/session.js';
+import { PrismaService } from '../prisma/prisma.service.js';
+import { RateLimiter } from '../support/rate-limiter.js';
 import { CreateOrderDto } from './create-order.dto.js';
 import { orderInvite } from './ics.js';
 import { OrdersService } from './orders.service.js';
 
 @Controller('orders')
 export class OrdersController {
-  constructor(private readonly orders: OrdersService) {}
+  // Each checkout holds times for 31 minutes: 10 per hour per visitor is plenty for a real person.
+  private readonly checkouts = new RateLimiter(10, 60 * 60_000);
+
+  constructor(
+    private readonly orders: OrdersService,
+    private readonly prisma: PrismaService,
+  ) {}
 
   @Post()
-  create(@Body() dto: CreateOrderDto) {
-    return this.orders.create(dto);
+  async create(@Req() req: Request, @Body() dto: CreateOrderDto) {
+    if (!this.checkouts.allow(req.ip ?? 'unknown'))
+      throw new HttpException(
+        'Too many booking attempts. Please try again later.',
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    return this.orders.create(
+      dto,
+      await sessionEmail(this.prisma, req.cookies?.[COOKIE]),
+    );
   }
 
   @Get(':id')

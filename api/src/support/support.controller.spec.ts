@@ -13,6 +13,17 @@ const dto = {
   timezone: 'Asia/Seoul',
 };
 
+/** Signed-in visitor and AI budget left, unless a test says otherwise. */
+function controller({ signedIn = true, budgetLeft = true } = {}) {
+  const budget = { take: vi.fn().mockResolvedValue(budgetLeft) };
+  const auth = {
+    emailFor: signedIn
+      ? vi.fn().mockResolvedValue('dana@example.com')
+      : vi.fn().mockRejectedValue(new Error('401')),
+  };
+  return new SupportController(budget as never, auth as never);
+}
+
 afterEach(() => vi.unstubAllGlobals());
 
 describe('SupportController', () => {
@@ -22,9 +33,10 @@ describe('SupportController', () => {
       json: async () => ({ reply: 'Refunds take 5-10 days.', mode: 'demo' }),
     });
     vi.stubGlobal('fetch', fetch);
-    await expect(
-      new SupportController().chat(req('sid-1'), dto),
-    ).resolves.toEqual({ reply: 'Refunds take 5-10 days.', mode: 'demo' });
+    await expect(controller().chat(req('sid-1'), dto)).resolves.toEqual({
+      reply: 'Refunds take 5-10 days.',
+      mode: 'demo',
+    });
     expect(JSON.parse(fetch.mock.calls[0][1].body)).toEqual({
       ...dto,
       mode: 'demo',
@@ -42,7 +54,7 @@ describe('SupportController', () => {
       }),
     });
     vi.stubGlobal('fetch', fetch);
-    await new SupportController().chat(req(), { ...dto, mode: 'ai' });
+    await controller().chat(req(), { ...dto, mode: 'ai' });
     expect(JSON.parse(fetch.mock.calls[0][1].body).mode).toBe('ai');
   });
 
@@ -52,7 +64,7 @@ describe('SupportController', () => {
       json: async () => ({ reply: 'hi', mode: 'demo' }),
     });
     vi.stubGlobal('fetch', fetch);
-    await new SupportController().chat(req(), dto);
+    await controller().chat(req(), dto);
     expect(JSON.parse(fetch.mock.calls[0][1].body).session).toBeNull();
   });
 
@@ -61,16 +73,16 @@ describe('SupportController', () => {
       'fetch',
       vi.fn().mockRejectedValue(new Error('ECONNREFUSED')),
     );
-    await expect(
-      new SupportController().chat(req(), dto),
-    ).rejects.toBeInstanceOf(ServiceUnavailableException);
+    await expect(controller().chat(req(), dto)).rejects.toBeInstanceOf(
+      ServiceUnavailableException,
+    );
     vi.stubGlobal(
       'fetch',
       vi.fn().mockResolvedValue({ ok: false, json: async () => ({}) }),
     );
-    await expect(
-      new SupportController().chat(req(), dto),
-    ).rejects.toBeInstanceOf(ServiceUnavailableException);
+    await expect(controller().chat(req(), dto)).rejects.toBeInstanceOf(
+      ServiceUnavailableException,
+    );
   });
 
   it('stops a visitor after 20 messages in 10 minutes, before calling the AI service', async () => {
@@ -79,11 +91,9 @@ describe('SupportController', () => {
       json: async () => ({ reply: 'ok', mode: 'demo' }),
     });
     vi.stubGlobal('fetch', fetch);
-    const controller = new SupportController();
-    for (let i = 0; i < 20; i++) await controller.chat(req(), dto);
-    const err = await controller
-      .chat(req(), dto)
-      .catch((e: HttpException) => e);
+    const support = controller();
+    for (let i = 0; i < 20; i++) await support.chat(req(), dto);
+    const err = await support.chat(req(), dto).catch((e: HttpException) => e);
     expect((err as HttpException).getStatus()).toBe(429);
     expect(fetch).toHaveBeenCalledTimes(20);
   });
@@ -114,5 +124,54 @@ describe('ChatDto', () => {
       'timezone',
     ]);
     expect(await errors({ ...dto, mode: 'turbo' })).toEqual(['mode']);
+  });
+});
+
+describe('Live AI guardrails', () => {
+  const live = { ...dto, mode: 'ai' as const };
+  const aiReplies = () => {
+    const fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        reply: 'hi',
+        mode: 'demo',
+        model: null,
+        notice: null,
+      }),
+    });
+    vi.stubGlobal('fetch', fetch);
+    return fetch;
+  };
+  const forwardedMode = (fetch: ReturnType<typeof vi.fn>) =>
+    JSON.parse(fetch.mock.calls[0][1].body).mode;
+
+  it('is for signed-in users: visitors get a demo answer with a clear notice', async () => {
+    const fetch = aiReplies();
+    const body = await controller({ signedIn: false }).chat(req(), live);
+    expect(forwardedMode(fetch)).toBe('demo');
+    expect(body.notice).toBe('Sign in to use Live AI. This is a demo answer.');
+  });
+
+  it('passes through when signed in and within the daily cap', async () => {
+    const fetch = aiReplies();
+    await controller().chat(req('sid'), live);
+    expect(forwardedMode(fetch)).toBe('ai');
+  });
+
+  it("falls back to demo once today's cap is used up", async () => {
+    const fetch = aiReplies();
+    const body = await controller({ budgetLeft: false }).chat(req('sid'), live);
+    expect(forwardedMode(fetch)).toBe('demo');
+    expect(body.notice).toMatch(/today's limit/);
+  });
+
+  it('sends the service token to the AI service when one is configured', async () => {
+    const fetch = aiReplies();
+    vi.stubEnv('AI_SERVICE_TOKEN', 'secret-123');
+    await controller().chat(req('sid'), dto);
+    expect(fetch.mock.calls[0][1].headers['X-Service-Token']).toBe(
+      'secret-123',
+    );
+    vi.unstubAllEnvs();
   });
 });

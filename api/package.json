@@ -7,7 +7,7 @@
   "license": "UNLICENSED",
   "type": "module",
   "scripts": {
-    "build": "nest build",
+    "build": "prisma generate && nest build",
     "deploy": "nest deploy",
     "format": "prettier --write \"src/**/*.ts\" \"prisma/**/*.ts\"",
     "start": "nest start",
@@ -19,7 +19,8 @@
     "test:watch": "vitest",
     "test:cov": "vitest run --coverage",
     "test:debug": "vitest --inspect-brk --no-file-parallelism",
-    "seed:briefs": "tsx prisma/seed-briefs.ts"
+    "seed:briefs": "tsx prisma/seed-briefs.ts",
+    "reset:demo": "tsx prisma/reset-demo.ts"
   },
   "dependencies": {
     "@nestjs/common": "^12.0.1",
@@ -64,5 +65,8 @@
     "esbuild@0.28.2": true,
     "prisma@7.10.1": true,
     "fsevents@2.3.3": true
+  },
+  "engines": {
+    "node": ">=22"
   }
 }

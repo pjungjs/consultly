@@ -131,7 +131,7 @@ export default function PlannerList({ consultants }: { consultants: Row[] }) {
           <span>
             {shown.length} consultant{shown.length === 1 ? "" : "s"}
           </span>
-          <span className="w-24 text-right">Per hour</span>
+          <span className="w-24 text-right">Per session</span>
           <div className="grid grid-cols-7 text-center" aria-hidden>
             {week.map((d) => (
               <span key={d.toISOString()}>{d.toLocaleDateString(undefined, { weekday: "narrow" })}</span>
@@ -167,7 +167,10 @@ export default function PlannerList({ consultants }: { consultants: Row[] }) {
                           : "Fully booked for the next 60 days"}
                       </p>
                     </div>
-                    <span className="text-lg font-medium sm:w-24 sm:text-right">{formatPrice(c.rateCents)}</span>
+                    <span className="text-lg font-medium sm:w-24 sm:text-right">
+                      {formatPrice(c.rateCents)}
+                      <span className="block text-xs font-normal text-muted">{c.slotMinutes} min</span>
+                    </span>
                     <div className="grid grid-cols-7 gap-1" aria-label="Open hours this week">
                       {week.map((d) => {
                         const open = c.slots.filter((iso) => sameDay(iso, d)).length;

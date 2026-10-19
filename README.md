@@ -101,9 +101,15 @@ cd api && npm run seed:briefs
 | | `RESEND_API_KEY`, `EMAIL_FROM` | Optional. Without a key, emails are printed in the API console. In development, if a send fails, the sign-in link is shown on screen instead |
 | | `AI_URL`, `UPLOAD_DIR` | Where the AI service runs; where brief PDFs are stored (default `./uploads`) |
 | | `DEMO_CONSULTANT_EMAIL`, `DEMO_CLIENT_EMAIL` | Optional, for demo data |
-| `web/.env.local` | `NEXT_PUBLIC_API_URL` | Where the API runs |
+| | `DEMO_LOGIN` | `true` shows "Try the demo": each visitor gets a private demo client and their own copy of consultant Jason Jefferson, which they can reset (for the deployed portfolio site) |
+| | `AI_DAILY_CHAT_LIMIT`, `AI_DAILY_BRIEF_LIMIT` | Daily caps on Claude calls (defaults 200 and 30); past them the app falls back to demo answers |
+| | `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_BUCKET` | Deployed: store brief PDFs in a private Supabase Storage bucket instead of on disk |
+| | `AI_SERVICE_TOKEN` | Deployed: shared secret between the API and the AI service (set the same value in both) |
+| `web/.env.local` | `NEXT_PUBLIC_API_URL` | Where the browser reaches the API (`/api` when deployed, forwarded by Next.js) |
+| | `API_INTERNAL_URL` | Deployed: the API's real address, for that forwarding and server rendering |
 | `ai/.env` | `ANTHROPIC_API_KEY` | Optional. Without it, briefs are stored without a summary and the Help chat answers in demo mode |
 | | `CLAUDE_MODEL` | Optional. Defaults to `claude-haiku-5-5`, the cheapest model |
+| | `API_URL`, `AI_SERVICE_TOKEN` | Deployed: the API's address and the shared secret |
 
 ## Tests
 ```bash
@@ -113,8 +119,14 @@ cd ai && uv run pytest # PDF reading, prep sheets, Help assistant (no API calls)
 ```
 No test calls Stripe, Resend or Claude; all three are replaced with fakes.
 
-## Before deploying
+## Deploying
+
+`render.yaml` describes the API and AI service for Render's free plan; the website deploys to Vercel (root directory `web`, with `NEXT_PUBLIC_API_URL=/api` and `API_INTERNAL_URL` set to the API's address), and the database and PDF storage live on Supabase. Stripe needs a webhook endpoint pointing at `<api>/stripe/webhook`.
+
+AI spending is capped in three layers: Live AI requires sign-in, the API enforces daily caps stored in the database, and a monthly limit in the Anthropic Console is the final backstop.
+
+## Before a real launch
 - Verify a sending domain in Resend; in test mode it only delivers to the account owner's address.
-- Move brief PDFs from local disk to object storage (for example S3), and the chat rate limit from memory to a shared store (for example Redis).
+- Move the per-visitor rate limits from memory to a shared store (for example Redis) once there's more than one server.
 - Add admin review before new consultant profiles go live, and a rate limit on sign-in emails.
 - Set `NODE_ENV=production`: it switches off the on-screen sign-in link and the model label in the Help chat.

@@ -2,7 +2,9 @@ import {
   BadRequestException,
   ConflictException,
   ForbiddenException,
+  HttpException,
   NotFoundException,
+  UnauthorizedException,
 } from '@nestjs/common';
 import { Prisma } from '../generated/prisma/client.js';
 import { OrdersService } from './orders.service.js';
@@ -39,6 +41,7 @@ function setup() {
       count: vi.fn().mockResolvedValue(1), // sessions still booked in the order after a cancel
     },
     brief: { findUnique: vi.fn().mockResolvedValue(null), delete: vi.fn() },
+    client: { findUnique: vi.fn().mockResolvedValue(null) }, // the signed-in account's profile
     order: {
       create: vi.fn().mockResolvedValue({ id: 'o1' }),
       update: vi.fn(),
@@ -391,5 +394,180 @@ describe('OrdersService.cancelByClient', () => {
       service.cancelByClient('b1', 'dana@example.com'),
     ).resolves.toMatchObject({ cancelled: true });
     expect(email.send).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('OrdersService.create guardrails', () => {
+  const free = { ...consultant, email: null, rateCents: 0, slotMinutes: 30 };
+
+  it('confirms a free session straight away, without Stripe, for the signed-in address', async () => {
+    const { service, prisma, consultants, stripe } = setup();
+    consultants.get.mockResolvedValue(free);
+    prisma.booking.count.mockResolvedValue(0); // nothing held, no free sessions yet
+    prisma.order.updateMany.mockResolvedValue({ count: 1 });
+    prisma.order.findUnique.mockResolvedValue({
+      id: 'o1',
+      clientName: 'Dana',
+      clientEmail: 'dana@example.com',
+      clientTimezone: 'UTC',
+      amountCents: 0,
+      consultant: { name: 'Onboarding', timezone: 'UTC' },
+      bookings: [],
+    });
+    const result = await service.create(
+      dto({ startsAt: [SLOT_A], clientEmail: 'typed@elsewhere.com' }) as never,
+      'Dana@Example.com',
+    );
+    expect(result.checkoutUrl).toMatch(/\/orders\/o1$/);
+    expect(stripe.checkout.sessions.create).not.toHaveBeenCalled();
+    expect(prisma.order.create.mock.calls[0][0].data.clientEmail).toBe(
+      'dana@example.com',
+    ); // never the typed address
+    expect(prisma.order.updateMany).toHaveBeenCalledWith({
+      where: { id: 'o1', status: 'PENDING' },
+      data: { status: 'CONFIRMED' },
+    });
+  });
+
+  it('refuses free sessions to signed-out visitors, so confirmations cannot be sent to strangers', async () => {
+    const { service, consultants, prisma } = setup();
+    consultants.get.mockResolvedValue(free);
+    await expect(service.create(dto() as never, null)).rejects.toBeInstanceOf(
+      UnauthorizedException,
+    );
+    expect(prisma.order.create).not.toHaveBeenCalled();
+  });
+
+  it('allows at most 2 upcoming free sessions per account', async () => {
+    const { service, consultants, prisma } = setup();
+    consultants.get.mockResolvedValue(free);
+    prisma.booking.count.mockResolvedValueOnce(0).mockResolvedValueOnce(2); // held, then upcoming free
+    await expect(
+      service.create(dto({ startsAt: [SLOT_A] }) as never, 'dana@example.com'),
+    ).rejects.toThrow('at most 2 upcoming free sessions');
+  });
+
+  it('caps unpaid held times per address, so a calendar cannot be tied up', async () => {
+    const { service, prisma, stripe } = setup();
+    prisma.booking.count.mockResolvedValueOnce(5); // already holding 5; this order asks for 2 more
+    const err = await service
+      .create(dto() as never)
+      .catch((e: HttpException) => e);
+    expect((err as HttpException).getStatus()).toBe(429);
+    expect(stripe.checkout.sessions.create).not.toHaveBeenCalled();
+  });
+
+  it('names demo bookings "Demo", whatever name the demo account has', async () => {
+    const { service, prisma } = setup();
+    prisma.client.findUnique.mockResolvedValue({ name: 'Something rude' });
+    await service.create(dto() as never, 'demo-0123456789ab@consultly.test');
+    expect(prisma.order.create.mock.calls[0][0].data.clientName).toBe('Demo');
+  });
+});
+
+describe('who a booking is for', () => {
+  it("signed in: the account's email and profile name, never what was typed", async () => {
+    const { service, prisma } = setup();
+    prisma.client.findUnique.mockResolvedValue({ name: 'Dana Profile' });
+    await service.create(
+      dto({ clientName: 'Typed', clientEmail: 'typed@elsewhere.com' }) as never,
+      'Dana@Example.com',
+    );
+    expect(prisma.order.create.mock.calls[0][0].data).toMatchObject({
+      clientEmail: 'dana@example.com',
+      clientName: 'Dana Profile',
+    });
+  });
+
+  it('signed in without a profile name: the start of the email', async () => {
+    const { service, prisma } = setup();
+    await service.create(
+      dto({ clientName: undefined, clientEmail: undefined }) as never,
+      'dana@example.com',
+    );
+    expect(prisma.order.create.mock.calls[0][0].data.clientName).toBe('dana');
+  });
+
+  it('signed out: needs a name and email', async () => {
+    const { service, prisma } = setup();
+    await expect(
+      service.create(dto({ clientName: undefined }) as never),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(prisma.order.create).not.toHaveBeenCalled();
+  });
+});
+
+describe("a demo visitor's private consultant", () => {
+  const copy = {
+    ...consultant,
+    email: 'jason-0123456789ab@consultly.test',
+    demoOwner: '0123456789ab',
+  };
+
+  it("is bookable by that visitor's demo client", async () => {
+    const { service, consultants, prisma } = setup();
+    consultants.get.mockResolvedValue(copy);
+    await service.create(dto() as never, 'demo-0123456789ab@consultly.test');
+    expect(prisma.order.create).toHaveBeenCalled();
+  });
+
+  it('looks missing to anyone else, signed in or not', async () => {
+    const { service, consultants, prisma } = setup();
+    consultants.get.mockResolvedValue(copy);
+    for (const email of [
+      null,
+      'dana@example.com',
+      'demo-ffffffffffff@consultly.test',
+    ])
+      await expect(
+        service.create(dto() as never, email),
+      ).rejects.toBeInstanceOf(NotFoundException);
+    expect(prisma.order.create).not.toHaveBeenCalled();
+  });
+});
+
+describe('cancelling a pre-made demo session', () => {
+  it('skips Stripe: it was never charged', async () => {
+    const { service, prisma, stripe } = setup();
+    const sample = booking({
+      order: {
+        ...booking().order,
+        clientEmail: 'demo-0123456789ab@consultly.test',
+        stripePaymentId: null,
+        stripeSessionId: null,
+      },
+    });
+    prisma.booking.findUnique.mockResolvedValue(sample);
+    prisma.booking.findUniqueOrThrow.mockResolvedValue(sample);
+    await expect(
+      service.cancelByClient('b1', 'demo-0123456789ab@consultly.test'),
+    ).resolves.toEqual({ cancelled: true, refundedCents: 20000 });
+    expect(stripe.refunds.create).not.toHaveBeenCalled();
+  });
+});
+
+describe('cancelling a free session', () => {
+  it('cancels without contacting Stripe and says there was nothing to refund', async () => {
+    const { service, prisma, stripe, email } = setup();
+    const freeBooking = booking({
+      amountCents: 0,
+      order: {
+        ...booking().order,
+        stripePaymentId: null,
+        stripeSessionId: null,
+      },
+    });
+    prisma.booking.findUnique.mockResolvedValue(freeBooking);
+    prisma.booking.findUniqueOrThrow.mockResolvedValue(freeBooking);
+    await expect(
+      service.cancelByClient('b1', 'dana@example.com'),
+    ).resolves.toEqual({ cancelled: true, refundedCents: 0 });
+    expect(stripe.refunds.create).not.toHaveBeenCalled();
+    expect(prisma.booking.update.mock.calls[0][0].data).toMatchObject({
+      status: 'CANCELLED',
+      refundId: null,
+      cancelledBy: 'CLIENT',
+    });
+    expect(email.send.mock.calls[0][2]).toContain('nothing to refund');
   });
 });

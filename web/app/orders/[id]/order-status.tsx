@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { use, useEffect, useState } from "react";
-import { api, formatPrice, type Order } from "@/lib/api";
+import { api, formatPrice, isNotFound, type Order } from "@/lib/api";
+import NotFoundMessage from "../../not-found-message";
 import BriefPanel from "../../brief-panel";
 import { cityFromZone, timeIn } from "@/lib/zone";
 
@@ -15,12 +16,20 @@ export default function OrderStatus({ params }: { params: Promise<{ id: string }
   const { id } = use(params);
   const [order, setOrder] = useState<Order | null>(null);
   const [gaveUp, setGaveUp] = useState(false);
+  const [missing, setMissing] = useState(false);
 
   useEffect(() => {
     let polls = 0;
     let timer: ReturnType<typeof setTimeout>;
     const load = async () => {
-      const o = await api<Order>(`/orders/${id}`);
+      let o: Order;
+      try {
+        o = await api<Order>(`/orders/${id}`);
+      } catch (err) {
+        if (isNotFound(err)) setMissing(true);
+        else setGaveUp(true);
+        return;
+      }
       setOrder(o);
       if (o.status === "PENDING") {
         if (++polls < MAX_POLLS) timer = setTimeout(load, POLL_MS);
@@ -31,7 +40,8 @@ export default function OrderStatus({ params }: { params: Promise<{ id: string }
     return () => clearTimeout(timer);
   }, [id]);
 
-  if (!order) return <p className="text-muted">Loading your booking…</p>;
+  if (missing) return <NotFoundMessage title="Booking not found" body="This booking link isn't valid. Your bookings are always listed under My bookings." />;
+  if (!order) return <p className="text-muted">{gaveUp ? "This booking couldn't be loaded. Refresh to try again." : "Loading your booking…"}</p>;
 
   if (order.status === "PENDING") {
     return (
@@ -64,7 +74,7 @@ export default function OrderStatus({ params }: { params: Promise<{ id: string }
   return (
     <div className="order-confirmed max-w-2xl space-y-8">
       <div>
-        <p className="inline-block rounded-sm bg-highlight px-2 py-0.5 text-sm font-medium text-on-highlight">Paid and booked</p>
+        <p className="inline-block rounded-sm bg-highlight px-2 py-0.5 text-sm font-medium text-on-highlight">{order.amountCents === 0 ? "Booked" : "Paid and booked"}</p>
         <h1 className="mt-4 font-serif text-5xl leading-tight">
           You&apos;re seeing {order.consultant.name} {count === 1 ? "once" : `${count} times`}
         </h1>
@@ -84,7 +94,7 @@ export default function OrderStatus({ params }: { params: Promise<{ id: string }
         ))}
       </ul>
       <dl className="order-summary grid gap-x-8 gap-y-3 sm:grid-cols-[10rem_1fr]">
-        <dt className="text-muted">Paid</dt>
+        <dt className="text-muted">{order.amountCents === 0 ? "Price" : "Paid"}</dt>
         <dd>{formatPrice(order.amountCents)}</dd>
         <dt className="text-muted">Confirmation sent to</dt>
         <dd>{order.clientEmail}</dd>

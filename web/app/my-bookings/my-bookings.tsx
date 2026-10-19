@@ -2,10 +2,11 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { API_URL, CLIENT_CANCEL_HOURS, formatPrice, type Order } from "@/lib/api";
+import { accountLabel, apiFetch, CLIENT_CANCEL_HOURS, formatPrice, type Order } from "@/lib/api";
 import { cityFromZone, timeIn } from "@/lib/zone";
 import { dayKey, keyLabel } from "@/lib/calendar";
 import SessionCalendar from "../session-calendar";
+import DemoSignIn from "./demo-sign-in";
 
 type State =
   | { kind: "loading" }
@@ -13,7 +14,7 @@ type State =
   | { kind: "signed-in"; email: string; orders: Order[]; loadedAt: number };
 
 async function fetchMine(): Promise<State> {
-  const res = await fetch(`${API_URL}/me/orders`, { credentials: "include", cache: "no-store" });
+  const res = await apiFetch(`/me/orders`, { credentials: "include", cache: "no-store" });
   if (res.status === 401) return { kind: "signed-out" };
   const body = await res.json();
   return { kind: "signed-in", email: body.email, orders: body.orders, loadedAt: Date.now() };
@@ -32,7 +33,7 @@ export default function MyBookings() {
 
   async function requestLink(form: FormData) {
     const email = String(form.get("email"));
-    const res = await fetch(`${API_URL}/auth/magic-link`, {
+    const res = await apiFetch(`/auth/magic-link`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email }),
@@ -49,7 +50,7 @@ export default function MyBookings() {
   }
 
   async function signOut() {
-    await fetch(`${API_URL}/auth/logout`, { method: "POST", credentials: "include" });
+    await apiFetch(`/auth/logout`, { method: "POST", credentials: "include" });
     setState({ kind: "signed-out" });
   }
 
@@ -85,6 +86,7 @@ export default function MyBookings() {
             )}
           </>
         )}
+        {!state.sent && <DemoSignIn />}
       </div>
     );
   }
@@ -103,7 +105,7 @@ export default function MyBookings() {
       <div className="flex flex-wrap items-baseline justify-between gap-3">
         <h1 className="font-display text-4xl font-semibold tracking-tight">My bookings</h1>
         <p className="text-sm text-muted">
-          Signed in as {state.email} ·{" "}
+          Signed in as {accountLabel(state.email)} ·{" "}
           <button onClick={signOut} className="underline hover:text-ink">
             Sign out
           </button>
@@ -191,17 +193,20 @@ function SessionRow({ s, now, onCancelled }: { s: Session; now: number; onCancel
   const upcoming = startsIn > 0 && !cancelled;
   const canCancel = upcoming && startsIn > CLIENT_CANCEL_HOURS * 3_600_000;
   const price = formatPrice(s.amountCents ?? 0);
+  const free = (s.amountCents ?? 0) === 0;
 
   // Same two-step confirm as the consultant's cancel: no browser dialog, the refund happens on the second click.
   async function cancel() {
     setBusy(true);
     setError(null);
-    const res = await fetch(`${API_URL}/me/bookings/${s.id}/cancel`, { method: "POST", credentials: "include" });
+    const res = await apiFetch(`/me/bookings/${s.id}/cancel`, { method: "POST", credentials: "include" });
     const body = await res.json();
     setBusy(false);
     if (!res.ok) return setError(body.message);
     setConfirming(false);
-    onCancelled(`Cancelled your session with ${s.order.consultant.name} and refunded ${formatPrice(body.refundedCents)}. A confirmation is on its way to your inbox.`);
+    onCancelled(
+      `Cancelled your session with ${s.order.consultant.name}${free ? "" : ` and refunded ${formatPrice(body.refundedCents)}`}. A confirmation is on its way to your inbox.`,
+    );
   }
 
   return (
@@ -218,7 +223,8 @@ function SessionRow({ s, now, onCancelled }: { s: Session; now: number; onCancel
         <div className="flex flex-wrap items-baseline gap-4 text-sm">
           {cancelled ? (
             <span className="font-medium text-red-700 dark:text-red-400">
-              {s.cancelledBy === "CLIENT" ? "Cancelled by you" : "Cancelled by consultant"} · {price} refunded
+              {s.cancelledBy === "CLIENT" ? "Cancelled by you" : "Cancelled by consultant"}
+              {!free && ` · ${price} refunded`}
             </span>
           ) : (
             <span className="text-muted">{price}</span>
@@ -241,13 +247,13 @@ function SessionRow({ s, now, onCancelled }: { s: Session; now: number; onCancel
       </div>
       {confirming && !cancelled && (
         <div className="my-bookings-cancel-confirm flex flex-wrap items-center justify-between gap-3 rounded-sm bg-sheet px-3 py-2 text-sm">
-          <span>Cancel this session? You&apos;ll get {price} back.</span>
+          <span>{free ? "Cancel this free session?" : <>Cancel this session? You&apos;ll get {price} back.</>}</span>
           <span className="flex items-center gap-3">
             <button onClick={() => setConfirming(false)} disabled={busy} className="text-muted hover:text-ink">
               Keep session
             </button>
             <button onClick={cancel} disabled={busy} className="rounded-sm bg-ink px-3 py-1.5 font-medium text-paper disabled:opacity-40">
-              {busy ? "Refunding…" : `Cancel & refund ${price}`}
+              {busy ? "Cancelling…" : free ? "Cancel session" : `Cancel & refund ${price}`}
             </button>
           </span>
           {error && (

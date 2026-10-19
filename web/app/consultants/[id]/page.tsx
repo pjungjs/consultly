@@ -1,16 +1,20 @@
 import Link from "next/link";
+import { notFound } from "next/navigation";
 import { Suspense } from "react";
-import { api, formatPrice, type Consultant, type SlotList } from "@/lib/api";
+import { api, formatPrice, isNotFound, type Consultant, type SlotList } from "@/lib/api";
 import { monogram } from "@/lib/monogram";
 import LocalClock from "./local-clock";
 import SlotPicker from "./slot-picker";
 
 async function Studio({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const [consultant, slotList] = await Promise.all([
-    api<Consultant>(`/consultants/${id}`),
-    api<SlotList>(`/consultants/${id}/slots`),
-  ]);
+  let consultant: Consultant, slotList: SlotList;
+  try {
+    [consultant, slotList] = await Promise.all([api<Consultant>(`/consultants/${id}`), api<SlotList>(`/consultants/${id}/slots`)]);
+  } catch (err) {
+    if (isNotFound(err)) notFound(); // an unknown or mistyped consultant link
+    throw err;
+  }
   const { initials, colour } = monogram(consultant.name);
 
   return (
@@ -24,6 +28,11 @@ async function Studio({ params }: { params: Promise<{ id: string }> }) {
           {initials}
         </div>
         <div className="profile-details max-w-2xl">
+          {consultant.demo && (
+            <p className="profile-demo-note mb-3 w-fit rounded-sm bg-highlight px-2 py-1 text-xs font-medium text-on-highlight">
+              Your Demo consultant: only you can see and book this profile
+            </p>
+          )}
           <h1 className="font-serif text-5xl leading-none sm:text-7xl">{consultant.name}</h1>
           <p className="mt-4 text-lg">{consultant.headline}</p>
           <div className="mt-1">

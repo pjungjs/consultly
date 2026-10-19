@@ -69,7 +69,7 @@ export class BriefsController {
     @Res() res: Response,
     @Param('orderId') orderId: string,
   ) {
-    const { path, filename } = await this.briefs.file(
+    const { data, filename } = await this.briefs.file(
       orderId,
       await this.auth.emailFor(req.cookies?.[COOKIE]),
     );
@@ -79,6 +79,6 @@ export class BriefsController {
       `inline; filename="${filename.replace(/[^\w.\- ]/g, '_')}"`,
     );
     res.setHeader('X-Content-Type-Options', 'nosniff');
-    res.sendFile(path);
+    res.send(data);
   }
 }

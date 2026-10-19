@@ -14,7 +14,7 @@ API_URL = os.environ.get("API_URL", "http://127.0.0.1:4000")
 COOKIE = "consultly_session"
 CLIENT_CANCEL_HOURS = 24  # matches the API
 
-SYSTEM = f"""You are the support assistant on Consultly, a marketplace where clients book and pay independent consultants for one-hour sessions.
+SYSTEM = f"""You are the support assistant on Consultly, a marketplace where clients book and pay independent consultants for 30- or 60-minute sessions.
 
 Answer questions about using Consultly, using the reference below. Be brief and friendly: two to four sentences unless the user asks for detail.
 When a question is about the user's own bookings or sessions, call get_my_bookings and answer from its result; times in it are already in the user's time zone.
@@ -162,6 +162,16 @@ async def demo_reply(question: str, session: str | None, timezone: str) -> str:
 
 # --- With a key: Claude, with one read-only tool -------------------------------------------------------
 
+LIVE_HISTORY = 10  # messages sent to Claude; older ones stay on screen but don't add to every request's cost
+
+
+def recent(messages: list[dict]) -> list[dict]:
+    """The last few messages, starting with a user message (the API requires that)."""
+    tail = messages[-LIVE_HISTORY:]
+    while tail and tail[0]["role"] != "user":
+        tail = tail[1:]
+    return tail
+
 
 async def claude_reply(
     client: anthropic.AsyncAnthropic,
@@ -192,9 +202,9 @@ async def claude_reply(
     try:
         runner = client.beta.messages.tool_runner(
             model=model,
-            max_tokens=16000,
+            max_tokens=2048,  # room for a short answer plus thinking; caps the cost of any single reply
             system=SYSTEM,
-            messages=messages,
+            messages=recent(messages),
             tools=[get_my_bookings],
             max_iterations=4,  # one lookup and an answer is the normal case; this caps a runaway loop
             output_config={

@@ -20,10 +20,14 @@ model Consultant {
   slotMinutes  Int            @default(60)
   timezone     String // IANA zone, e.g. "America/New_York"
   paused       Boolean        @default(false) // hidden from the catalogue and not bookable; existing bookings stay
+  demoOwner    String? // set on a demo visitor's private copy: hidden from the catalogue, bookable only by that visitor
+  createdAt    DateTime       @default(now())
   availability Availability[]
   bookings     Booking[]
   orders       Order[]
   timeOff      TimeOff[]
+
+  @@index([demoOwner])
 }
 
 // Weekly recurring hours in the consultant's own wall-clock time.
@@ -136,4 +140,13 @@ model Brief {
   message    String? // why there's no summary, shown to the user
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
+}
+
+// Live AI calls per day and kind ("chat", "brief"), so a daily cap survives restarts and sleeping servers.
+model AiUsage {
+  day   DateTime @db.Date
+  kind  String
+  count Int      @default(0)
+
+  @@id([day, kind])
 }

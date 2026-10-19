@@ -27,13 +27,26 @@ const consultant = (over: Record<string, unknown> = {}) => ({
 });
 
 describe('ConsultantsService', () => {
-  it('lists only profiles that are taking bookings: not paused and with weekly hours', async () => {
+  it('lists only profiles that are taking bookings, never demo copies, and never emails', async () => {
     const { service, prisma } = setup(consultant());
     await service.list();
-    expect(prisma.consultant.findMany.mock.calls[0][0].where).toEqual({
+    const query = prisma.consultant.findMany.mock.calls[0][0];
+    expect(query.where).toEqual({
       paused: false,
+      demoOwner: null,
       availability: { some: {} },
     });
+    expect(query.select.email).toBeUndefined();
+  });
+
+  it('shows one profile without its email, saying whether it is a demo copy', async () => {
+    const { service, prisma } = setup(consultant({ demoOwner: 'abc' }));
+    const profile = await service.profile('c1');
+    expect(
+      prisma.consultant.findUnique.mock.calls[0][0].select.email,
+    ).toBeUndefined();
+    expect(profile).toMatchObject({ id: 'c1', demo: true });
+    expect(profile).not.toHaveProperty('demoOwner');
   });
 
   it('offers times up to 60 days ahead', async () => {

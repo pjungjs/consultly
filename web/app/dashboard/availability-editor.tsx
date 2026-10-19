@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { API_URL, type AvailabilitySnapshot, type WeeklyHours } from "@/lib/api";
+import { apiFetch, type AvailabilitySnapshot, type WeeklyHours } from "@/lib/api";
 import { cityFromZone, timeIn } from "@/lib/zone";
 
 // Shown Sunday first; `iso` is the stored weekday (Luxon/ISO: Monday 1 … Sunday 7).
@@ -24,13 +24,13 @@ const toRows = (weekly: WeeklyHours[]): Row[] =>
   });
 
 async function call(path: string, init?: RequestInit): Promise<AvailabilitySnapshot> {
-  const res = await fetch(`${API_URL}/me/consultant/${path}`, {
+  const res = await apiFetch(`/me/consultant/${path}`, {
     credentials: "include",
     headers: { "Content-Type": "application/json" },
     ...init,
   });
   const body = await res.json();
-  if (!res.ok) throw new Error(Array.isArray(body.message) ? body.message.join(", ") : body.message);
+  if (!res.ok) throw new Error(Array.isArray(body.message) ? body.message.join(", ") : (body.message ?? ""));
   return body;
 }
 

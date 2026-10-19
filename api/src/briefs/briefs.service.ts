@@ -1,14 +1,19 @@
 import {
   BadRequestException,
   ConflictException,
+  HttpException,
+  HttpStatus,
   Injectable,
   Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { Prisma } from '../generated/prisma/client.js';
+import { AiBudgetService } from '../ai-budget/ai-budget.service.js';
+import { aiHeaders, aiUrl } from '../ai-budget/ai-service.js';
 import { PrismaService } from '../prisma/prisma.service.js';
+import { RateLimiter } from '../support/rate-limiter.js';
 import {
-  absolutePath,
+  readBriefFile,
   removeBrief,
   removeBriefFile,
   saveBriefFile,
@@ -47,14 +52,20 @@ const PUBLIC_FIELDS = {
 export class BriefsService {
   private readonly logger = new Logger(BriefsService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  // Each upload can call Claude: a few per hour per person is plenty for real use.
+  private readonly uploads = new RateLimiter(5, 60 * 60_000);
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly budget: AiBudgetService,
+  ) {}
 
   /** The client who booked, or the consultant they booked; anyone else sees "not found". */
   private async access(orderId: string, email: string) {
     const order = await this.prisma.order.findUnique({
       where: { id: orderId },
       include: {
-        consultant: { select: { email: true } },
+        consultant: { select: { email: true, slotMinutes: true } },
         bookings: {
           where: { status: 'CONFIRMED' },
           select: { startsAt: true },
@@ -87,11 +98,14 @@ export class BriefsService {
     await this.access(orderId, email);
     const brief = await this.prisma.brief.findUnique({ where: { orderId } });
     if (!brief) throw new NotFoundException('No brief for this booking');
-    return { path: absolutePath(brief.storedPath), filename: brief.filename };
+    return {
+      data: await readBriefFile(brief.storedPath),
+      filename: brief.filename,
+    };
   }
 
   async upload(orderId: string, email: string, file: UploadedPdf | undefined) {
-    const { canEdit } = await this.access(orderId, email);
+    const { order, canEdit } = await this.access(orderId, email);
     if (!canEdit)
       throw new ConflictException(
         'Briefs can only be added by the client, before the session starts.',
@@ -99,8 +113,18 @@ export class BriefsService {
     if (!file) throw new BadRequestException('Choose a PDF to upload.');
     if (!file.buffer.subarray(0, 4).equals(Buffer.from('%PDF')))
       throw new BadRequestException('Upload a PDF file.');
+    if (!this.uploads.allow(email.toLowerCase()))
+      throw new HttpException(
+        "You've uploaded several briefs in the last hour. Please try again later.",
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
 
-    const result = await this.summarise(file);
+    // Past the daily cap the PDF is still read and saved; it just isn't summarised.
+    const result = await this.summarise(
+      file,
+      await this.budget.take('brief'),
+      order.consultant.slotMinutes,
+    );
     const storedPath = await saveBriefFile(orderId, file.buffer);
     const previous = await this.prisma.brief.findUnique({ where: { orderId } });
     const data = {
@@ -136,19 +160,26 @@ export class BriefsService {
   }
 
   /** Sends the PDF to the Python AI service, which reads it and (with an API key) writes the prep sheet. */
-  private async summarise(file: UploadedPdf): Promise<AiResult> {
+  private async summarise(
+    file: UploadedPdf,
+    allowAi: boolean,
+    sessionMinutes: number,
+  ): Promise<AiResult> {
     const form = new FormData();
     form.append(
       'file',
       new Blob([new Uint8Array(file.buffer)], { type: 'application/pdf' }),
       'brief.pdf',
     );
+    form.append('allow_ai', allowAi ? 'true' : 'false');
+    form.append('session_minutes', String(sessionMinutes));
     let res: Response;
     try {
-      res = await fetch(
-        `${process.env.AI_URL ?? 'http://127.0.0.1:8000'}/briefs/summarize`,
-        { method: 'POST', body: form },
-      );
+      res = await fetch(aiUrl('/briefs/summarize'), {
+        method: 'POST',
+        headers: aiHeaders(),
+        body: form,
+      });
     } catch (err) {
       // The PDF is still saved, so the consultant can read the original; re-uploading retries the summary.
       this.logger.error(`AI service unreachable: ${(err as Error).message}`);

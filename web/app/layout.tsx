@@ -7,7 +7,9 @@ import {
 import Link from "next/link";
 import { Suspense } from "react";
 import AccountNav from "./account-nav";
+import DemoBar from "./demo-bar";
 import SupportChat from "./support-chat";
+import Toaster from "./toaster";
 import "./globals.css";
 
 const bricolage = Bricolage_Grotesque({
@@ -63,6 +65,10 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
             </div>
           </nav>
         </header>
+        {/* usePathname() is runtime-only data, so the demo bar streams in behind Suspense too. */}
+        <Suspense fallback={null}>
+          <DemoBar />
+        </Suspense>
         <main className="site-main mx-auto w-full max-w-5xl flex-1 px-4 py-10">
           {children}
         </main>
@@ -70,6 +76,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         <Suspense fallback={null}>
           <SupportChat />
         </Suspense>
+        <Toaster />
         <footer className="site-footer mt-16 border-t border-rule">
           <div className="site-footer-columns mx-auto grid max-w-5xl gap-8 px-4 py-10 text-sm sm:grid-cols-[1fr_auto_auto] sm:gap-16">
             <div className="site-footer-brand space-y-2">

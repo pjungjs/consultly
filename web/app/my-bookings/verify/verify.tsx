@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { API_URL } from "@/lib/api";
+import { apiFetch } from "@/lib/api";
 
 // The emailed link lands here; we trade the one-time token for a session cookie.
 export default function Verify() {
@@ -15,7 +15,7 @@ export default function Verify() {
   useEffect(() => {
     if (!token || spent.current) return;
     spent.current = true;
-    fetch(`${API_URL}/auth/verify`, {
+    apiFetch(`/auth/verify`, {
       method: "POST",
       credentials: "include",
       headers: { "Content-Type": "application/json" },
@@ -23,7 +23,7 @@ export default function Verify() {
     }).then(async (res) => {
       if (res.ok) {
         // Consultants land on their dashboard; everyone else on their bookings.
-        const me = await fetch(`${API_URL}/me`, { credentials: "include" }).then((r) => r.json());
+        const me = await apiFetch(`/me`, { credentials: "include" }).then((r) => r.json());
         return router.replace(me.consultant ? "/dashboard" : "/my-bookings");
       }
       setError((await res.json()).message);

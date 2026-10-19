@@ -2,9 +2,12 @@ import {
   BadRequestException,
   ConflictException,
   ForbiddenException,
+  HttpException,
+  HttpStatus,
   Injectable,
   Logger,
   NotFoundException,
+  UnauthorizedException,
 } from '@nestjs/common';
 import { DateTime } from 'luxon';
 import { Prisma, type BookingStatus } from '../generated/prisma/client.js';
@@ -15,6 +18,11 @@ import { StripeService } from '../stripe/stripe.service.js';
 import type { CreateOrderDto } from './create-order.dto.js';
 import { orderInvite } from './ics.js';
 import { removeBrief } from '../briefs/brief-files.js';
+import { demoIdOf } from '../auth/demo.js';
+
+// Anti-abuse limits per email address: times held while paying, and upcoming free sessions.
+const MAX_HELD_SESSIONS = 6;
+const MAX_UPCOMING_FREE = 2;
 
 // How close to the start a client may still cancel online for a full refund.
 export const CLIENT_CANCEL_HOURS = 24;
@@ -40,12 +48,39 @@ export class OrdersService {
   ) {}
 
   /** Holds every requested slot (all or nothing) and returns one Stripe Checkout URL. */
-  async create(dto: CreateOrderDto) {
+  async create(dto: CreateOrderDto, signedInEmail: string | null = null) {
     const consultant = await this.consultants.get(dto.consultantId);
+    // A demo visitor's consultant copy is private: only that visitor's own demo accounts can book it.
     if (
-      consultant.email &&
-      consultant.email.toLowerCase() === dto.clientEmail.trim().toLowerCase()
-    ) {
+      consultant.demoOwner &&
+      demoIdOf(signedInEmail) !== consultant.demoOwner
+    )
+      throw new NotFoundException('Consultant not found');
+    const free = consultant.rateCents === 0;
+    // Free sessions send a confirmation to whatever address books them, so they need a signed-in (proven)
+    // address; otherwise the site could be used to email strangers.
+    if (free && !signedInEmail)
+      throw new UnauthorizedException('Sign in to book a free session.');
+    // Signed in: the account's own email and profile name. Signed out (paid sessions only): what they typed.
+    const typedEmail = dto.clientEmail?.trim().toLowerCase();
+    if (!signedInEmail && (!typedEmail || !dto.clientName?.trim()))
+      throw new BadRequestException('Enter your name and email.');
+    const clientEmail = signedInEmail?.toLowerCase() ?? typedEmail!;
+    const profileName = signedInEmail
+      ? (
+          await this.prisma.client.findUnique({
+            where: { email: clientEmail },
+            select: { name: true },
+          })
+        )?.name
+      : null;
+    // Demo bookings are always named "Demo", so visitors can't put their own text on real consultants' dashboards.
+    const clientName = demoIdOf(clientEmail)
+      ? 'Demo'
+      : profileName?.trim() ||
+        dto.clientName?.trim() ||
+        clientEmail.split('@')[0];
+    if (consultant.email && consultant.email.toLowerCase() === clientEmail) {
       throw new BadRequestException(
         "You can't book sessions on your own profile.",
       );
@@ -53,6 +88,7 @@ export class OrdersService {
     const starts = dto.startsAt
       .map((s) => new Date(s))
       .sort((a, b) => a.getTime() - b.getTime());
+    await this.checkLimits(clientEmail, starts.length, free);
 
     // Only slots the schedule actually offers can be booked (no arbitrary times).
     const { slots } = await this.consultants.slots(consultant.id);
@@ -86,8 +122,8 @@ export class OrdersService {
         return tx.order.create({
           data: {
             consultantId: consultant.id,
-            clientName: dto.clientName,
-            clientEmail: dto.clientEmail.trim().toLowerCase(),
+            clientName,
+            clientEmail,
             clientTimezone: dto.clientTimezone ?? 'UTC',
             holdExpiresAt,
             amountCents: consultant.rateCents * starts.length,
@@ -115,12 +151,18 @@ export class OrdersService {
       throw err;
     }
 
-    // Network call to Stripe happens outside the DB transaction, so no lock is held while we wait.
     const web = process.env.WEB_URL ?? 'http://localhost:3000';
+    // Free sessions (e.g. onboarding calls) skip Stripe, which can't charge $0: confirmed straight away.
+    if (consultant.rateCents === 0) {
+      await this.markPaid(order.id);
+      return { orderId: order.id, checkoutUrl: `${web}/orders/${order.id}` };
+    }
+
+    // Network call to Stripe happens outside the DB transaction, so no lock is held while we wait.
     try {
       const session = await this.payments.stripe.checkout.sessions.create({
         mode: 'payment',
-        customer_email: dto.clientEmail,
+        customer_email: clientEmail,
         line_items: [
           {
             quantity: starts.length,
@@ -148,6 +190,36 @@ export class OrdersService {
       await this.setStatus(order.id, 'CANCELLED', 'PENDING');
       throw err;
     }
+  }
+
+  /** Anti-abuse: unpaid holds can't tie up a calendar, and free sessions can't all be claimed by one account. */
+  private async checkLimits(email: string, sessions: number, free: boolean) {
+    const now = new Date();
+    const held = await this.prisma.booking.count({
+      where: {
+        order: { clientEmail: email },
+        status: 'PENDING',
+        holdExpiresAt: { gt: now },
+      },
+    });
+    if (held + sessions > MAX_HELD_SESSIONS)
+      throw new HttpException(
+        'You already have times held while paying. Finish or cancel that checkout first.',
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    if (!free) return;
+    const upcomingFree = await this.prisma.booking.count({
+      where: {
+        order: { clientEmail: email },
+        status: 'CONFIRMED',
+        amountCents: 0,
+        startsAt: { gt: now },
+      },
+    });
+    if (upcomingFree + sessions > MAX_UPCOMING_FREE)
+      throw new ConflictException(
+        `You can have at most ${MAX_UPCOMING_FREE} upcoming free sessions.`,
+      );
   }
 
   async get(id: string) {
@@ -258,6 +330,31 @@ export class OrdersService {
     booking: Prisma.BookingGetPayload<{ include: { order: true } }>,
     by: CancelledBy,
   ) {
+    // A free session has nothing to refund, and the demo's pre-made sessions were never charged (no checkout):
+    // just cancel them.
+    const charged =
+      booking.amountCents > 0 &&
+      !(demoIdOf(booking.order.clientEmail) && !booking.order.stripeSessionId);
+    const refundId = charged ? await this.refund(booking, by) : null;
+    // CANCELLED drops the booking out of the one-active-booking-per-slot index, so the time reopens.
+    await this.prisma.booking.update({
+      where: { id: booking.id },
+      data: { status: 'CANCELLED', refundId, cancelledBy: by },
+    });
+    // Nothing left to prepare for: the brief and its file go once every session in the order is cancelled.
+    const remaining = await this.prisma.booking.count({
+      where: { orderId: booking.orderId, status: 'CONFIRMED' },
+    });
+    if (remaining === 0) await removeBrief(this.prisma, booking.orderId);
+    await this.sendCancellation(booking.id, by);
+    return { cancelled: true, refundedCents: booking.amountCents };
+  }
+
+  /** Refunds one session's price to the client's card; returns the Stripe refund id. */
+  private async refund(
+    booking: Prisma.BookingGetPayload<{ include: { order: true } }>,
+    by: CancelledBy,
+  ) {
     // Orders paid before we stored the payment id: look it up from the Checkout session.
     let paymentId = booking.order.stripePaymentId;
     if (!paymentId && booking.order.stripeSessionId) {
@@ -280,18 +377,7 @@ export class OrdersService {
       },
       { idempotencyKey: `refund-${booking.id}` },
     );
-    // CANCELLED drops the booking out of the one-active-booking-per-slot index, so the time reopens.
-    await this.prisma.booking.update({
-      where: { id: booking.id },
-      data: { status: 'CANCELLED', refundId: refund.id, cancelledBy: by },
-    });
-    // Nothing left to prepare for: the brief and its file go once every session in the order is cancelled.
-    const remaining = await this.prisma.booking.count({
-      where: { orderId: booking.orderId, status: 'CONFIRMED' },
-    });
-    if (remaining === 0) await removeBrief(this.prisma, booking.orderId);
-    await this.sendCancellation(booking.id, by);
-    return { cancelled: true, refundedCents: booking.amountCents };
+    return refund.id;
   }
 
   /** Both sides hear about a cancellation; whoever cancelled gets a receipt-style note. */
@@ -309,7 +395,10 @@ export class OrdersService {
         .toLocaleString(DateTime.DATETIME_MED_WITH_WEEKDAY);
     const clientWhen = at(b.order.clientTimezone);
     const amount = `$${(b.amountCents / 100).toFixed(2)}`;
-    const refundNote = `We've refunded ${amount} to your card; it usually appears within 5-10 business days.`;
+    const refundNote =
+      b.amountCents === 0
+        ? 'It was a free session, so there was nothing to refund.'
+        : `We've refunded ${amount} to your card; it usually appears within 5-10 business days.`;
     const mails: [string, string, string, string][] = [
       by === 'CONSULTANT'
         ? [
@@ -354,7 +443,10 @@ export class OrdersService {
         .toLocaleString(DateTime.DATETIME_MED_WITH_WEEKDAY);
     const lines = order.bookings.map((b) => when(b.startsAt));
     const receipt = `${process.env.WEB_URL ?? 'http://localhost:3000'}/orders/${order.id}`;
-    const total = `$${(order.amountCents / 100).toFixed(2)}`;
+    const total =
+      order.amountCents === 0
+        ? 'Free'
+        : `$${(order.amountCents / 100).toFixed(2)}`;
     try {
       await this.email.send(
         order.clientEmail,

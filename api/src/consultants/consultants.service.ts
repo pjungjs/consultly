@@ -4,18 +4,44 @@ import { generateSlots } from './slots.js';
 
 export const SLOT_WINDOW_DAYS = 60; // How far ahead clients can book
 
+// What anyone may see about a consultant: never the sign-in email.
+const PUBLIC_FIELDS = {
+  id: true,
+  name: true,
+  headline: true,
+  category: true,
+  bio: true,
+  rateCents: true,
+  slotMinutes: true,
+  timezone: true,
+  paused: true,
+} as const;
+
 @Injectable()
 export class ConsultantsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  /** The public catalogue: only profiles that are taking bookings (not paused, and with weekly hours set). */
+  /** The public catalogue: only profiles that are taking bookings (not paused, and with weekly hours set). Demo copies are private. */
   list() {
     return this.prisma.consultant.findMany({
-      where: { paused: false, availability: { some: {} } },
+      where: { paused: false, demoOwner: null, availability: { some: {} } },
       orderBy: { name: 'asc' },
+      select: PUBLIC_FIELDS,
     });
   }
 
+  /** One public profile. A demo copy opens by its link (only its visitor has it) and says it's a demo copy. */
+  async profile(id: string) {
+    const consultant = await this.prisma.consultant.findUnique({
+      where: { id },
+      select: { ...PUBLIC_FIELDS, demoOwner: true },
+    });
+    if (!consultant) throw new NotFoundException('Consultant not found');
+    const { demoOwner, ...rest } = consultant;
+    return { ...rest, demo: demoOwner !== null };
+  }
+
+  /** The full record, for the API's own checks (includes the email). */
   async get(id: string) {
     const consultant = await this.prisma.consultant.findUnique({
       where: { id },

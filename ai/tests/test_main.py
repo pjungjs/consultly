@@ -47,7 +47,7 @@ def test_returns_the_prep_sheet_when_claude_answers(with_key, monkeypatch):
         agenda=[AgendaItem(minutes=60, topic="Booking flow")],
     )
 
-    async def fake_write(_client, text):
+    async def fake_write(_client, text, minutes=60):
         assert (
             "double-booked" in text
         )  # Claude gets the extracted text, not the raw PDF
@@ -61,7 +61,7 @@ def test_returns_the_prep_sheet_when_claude_answers(with_key, monkeypatch):
 
 
 def test_reports_a_failed_summary_without_erroring(with_key, monkeypatch):
-    async def fake_write(_client, _text):
+    async def fake_write(_client, _text, _minutes=60):
         raise SummaryFailed("The AI service is busy. Try uploading again in a minute.")
 
     monkeypatch.setattr(main, "write_prep_sheet", fake_write)
@@ -85,3 +85,65 @@ def test_a_pdf_with_no_text_layer_is_not_sent_to_claude(with_key, monkeypatch):
 def test_rejects_non_pdfs_and_oversized_files():
     assert upload(b"hello").status_code == 415
     assert upload(b"%PDF" + b"0" * (10 * 1024 * 1024)).status_code == 413
+
+
+def test_past_the_daily_cap_the_pdf_is_read_but_claude_is_not_called(
+    with_key, monkeypatch
+):
+    async def must_not_run(*_):
+        raise AssertionError("Claude must not be called past the daily cap")
+
+    monkeypatch.setattr(main, "write_prep_sheet", must_not_run)
+    res = client.post(
+        "/briefs/summarize",
+        files={"file": ("brief.pdf", SAMPLE, "application/pdf")},
+        data={"allow_ai": "false"},
+    )
+    body = res.json()
+    assert (
+        body["status"] == "UNAVAILABLE"
+        and "limit" in body["message"]
+        and body["characters"] > 0
+    )
+
+
+def test_the_session_length_reaches_the_prompt(with_key, monkeypatch):
+    seen = {}
+
+    async def fake_write(_client, _text, minutes=60):
+        seen["minutes"] = minutes
+        return PrepSheet(
+            one_liner="x",
+            background="x",
+            goals=[],
+            key_facts=[],
+            questions=[],
+            gaps=[],
+            agenda=[],
+        ), "m"
+
+    monkeypatch.setattr(main, "write_prep_sheet", fake_write)
+    client.post(
+        "/briefs/summarize",
+        files={"file": ("brief.pdf", SAMPLE, "application/pdf")},
+        data={"session_minutes": "30"},
+    )
+    assert seen["minutes"] == 30
+
+
+def test_only_the_api_may_call_the_service_once_a_token_is_set(monkeypatch):
+    monkeypatch.setenv("AI_SERVICE_TOKEN", "secret-123")
+    assert client.get("/support/topics").status_code == 401
+    assert (
+        client.get("/support/topics", headers={"X-Service-Token": "wrong"}).status_code
+        == 401
+    )
+    assert (
+        client.get(
+            "/support/topics", headers={"X-Service-Token": "secret-123"}
+        ).status_code
+        == 200
+    )
+    assert (
+        client.get("/health").status_code == 200
+    )  # the host's health check stays open

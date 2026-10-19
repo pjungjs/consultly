@@ -23,7 +23,10 @@ import {
   ValidateNested,
 } from 'class-validator';
 import type { Request } from 'express';
+import { AiBudgetService } from '../ai-budget/ai-budget.service.js';
+import { aiHeaders, aiUrl } from '../ai-budget/ai-service.js';
 import { COOKIE } from '../auth/auth.controller.js';
+import { AuthService } from '../auth/auth.service.js';
 import { RateLimiter } from './rate-limiter.js';
 
 class ChatMessageDto {
@@ -60,13 +63,18 @@ export class SupportController {
   // Each AI answer costs money: 20 messages per 10 minutes per visitor is plenty for real help.
   private readonly limiter = new RateLimiter(20, 10 * 60_000);
 
+  constructor(
+    private readonly budget: AiBudgetService,
+    private readonly auth: AuthService,
+  ) {}
+
   /** The FAQ page: the same help topics the assistant answers from, so the two can never disagree. */
   @Get('topics')
   async topics() {
     try {
-      const res = await fetch(
-        `${process.env.AI_URL ?? 'http://127.0.0.1:8000'}/support/topics`,
-      );
+      const res = await fetch(aiUrl('/support/topics'), {
+        headers: aiHeaders(),
+      });
       if (!res.ok) throw new Error(`status ${res.status}`);
       return (await res.json()) as { title: string; answer: string }[];
     } catch (err) {
@@ -86,22 +94,31 @@ export class SupportController {
         HttpStatus.TOO_MANY_REQUESTS,
       );
     }
+    // Live AI counts against the daily cap; once it's used up, answers fall back to demo mode.
+    let mode = dto.mode ?? 'demo';
+    let notice: string | null = null;
+    // Live AI is for signed-in users only, so anonymous visitors and bots can't spend the API budget.
+    if (mode === 'ai' && !(await this.isSignedIn(req))) {
+      mode = 'demo';
+      notice = 'Sign in to use Live AI. This is a demo answer.';
+    } else if (mode === 'ai' && !(await this.budget.take('chat'))) {
+      mode = 'demo';
+      notice =
+        "Live AI has reached today's limit, so this is a demo answer. It resets at midnight UTC.";
+    }
     let res: Response;
     try {
-      res = await fetch(
-        `${process.env.AI_URL ?? 'http://127.0.0.1:8000'}/support/chat`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          // The session lets the AI service look up this user's bookings as this user, and nothing more.
-          body: JSON.stringify({
-            messages: dto.messages,
-            timezone: dto.timezone ?? 'UTC',
-            mode: dto.mode ?? 'demo',
-            session: req.cookies?.[COOKIE] ?? null,
-          }),
-        },
-      );
+      res = await fetch(aiUrl('/support/chat'), {
+        method: 'POST',
+        headers: aiHeaders({ 'Content-Type': 'application/json' }),
+        // The session lets the AI service look up this user's bookings as this user, and nothing more.
+        body: JSON.stringify({
+          messages: dto.messages,
+          timezone: dto.timezone ?? 'UTC',
+          mode,
+          session: req.cookies?.[COOKIE] ?? null,
+        }),
+      });
     } catch (err) {
       this.logger.error(`AI service unreachable: ${(err as Error).message}`);
       throw new ServiceUnavailableException(
@@ -112,11 +129,21 @@ export class SupportController {
       throw new ServiceUnavailableException(
         "The assistant couldn't answer that. Try again, or use the Contact page.",
       );
-    return (await res.json()) as {
+    const body = (await res.json()) as {
       reply: string;
       mode: 'ai' | 'demo';
       model: string | null;
       notice: string | null;
     };
+    return { ...body, notice: notice ?? body.notice };
+  }
+
+  private async isSignedIn(req: Request) {
+    try {
+      await this.auth.emailFor(req.cookies?.[COOKIE]);
+      return true;
+    } catch {
+      return false;
+    }
   }
 }

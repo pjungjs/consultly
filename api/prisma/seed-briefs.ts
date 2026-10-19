@@ -1,9 +1,9 @@
 import 'dotenv/config';
-import { copyFile, mkdir, readFile, stat } from 'node:fs/promises';
+import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient } from '../src/generated/prisma/client.js';
-import { UPLOAD_DIR } from '../src/briefs/brief-files.js';
+import { putBriefFile } from '../src/briefs/brief-files.js';
 
 // Demo mode: attaches pre-written briefs and prep sheets (prisma/samples/) to existing bookings,
 // so the feature can be seen without an Anthropic API key. Safe to re-run: it replaces its own samples.
@@ -35,7 +35,6 @@ const samples = [
 ];
 
 async function main() {
-  await mkdir(UPLOAD_DIR, { recursive: true });
   for (const sample of samples) {
     if (!sample.where) {
       console.log(
@@ -71,11 +70,12 @@ async function main() {
     }
     const pdf = join(SAMPLES, `${sample.file}.pdf`);
     const storedPath = `${order.id}-sample.pdf`;
-    await copyFile(pdf, join(UPLOAD_DIR, storedPath));
+    const bytes = await readFile(pdf);
+    await putBriefFile(storedPath, bytes);
     const data = {
       filename: `${sample.file}.pdf`,
       storedPath,
-      sizeBytes: (await stat(pdf)).size,
+      sizeBytes: bytes.length,
       pages: 1,
       status: 'READY',
       source: 'SAMPLE',

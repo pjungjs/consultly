@@ -1,13 +1,14 @@
 import {
   BadRequestException,
   ConflictException,
+  HttpException,
   NotFoundException,
 } from '@nestjs/common';
 import { BriefsService } from './briefs.service.js';
 
 // No real disk: file helpers are fakes, so tests can assert on what would be written and deleted.
 vi.mock('./brief-files.js', () => ({
-  absolutePath: (p: string) => `/uploads/${p}`,
+  readBriefFile: vi.fn().mockResolvedValue(Buffer.from('%PDF')),
   saveBriefFile: vi.fn().mockResolvedValue('o1-new.pdf'),
   removeBriefFile: vi.fn(),
   removeBrief: vi.fn(),
@@ -19,7 +20,7 @@ const order = (over: Record<string, unknown> = {}) => ({
   id: 'o1',
   status: 'CONFIRMED',
   clientEmail: 'Dana@Example.com',
-  consultant: { email: 'jason@consultly.test' },
+  consultant: { email: 'jason@consultly.test', slotMinutes: 30 },
   bookings: [{ startsAt: new Date(Date.now() + 48 * HOUR) }],
   ...over,
 });
@@ -38,7 +39,12 @@ function setup(found = order()) {
       upsert: vi.fn().mockImplementation(({ create }) => create),
     },
   };
-  return { service: new BriefsService(prisma as never), prisma };
+  const budget = { take: vi.fn().mockResolvedValue(true) }; // within today's AI cap
+  return {
+    service: new BriefsService(prisma as never, budget as never),
+    prisma,
+    budget,
+  };
 }
 
 /** Fakes the Python AI service's answer (or an outage). */
@@ -183,5 +189,53 @@ describe('BriefsService.upload', () => {
     expect(prisma.brief.upsert.mock.invocationCallOrder[0]).toBeLessThan(
       vi.mocked(files.removeBriefFile).mock.invocationCallOrder[0],
     );
+  });
+});
+
+describe('BriefsService AI guardrails', () => {
+  const sent = () => vi.mocked(fetch).mock.calls[0][1]!.body as FormData;
+
+  it("tells the AI service the session's length, so the agenda fits it", async () => {
+    aiReplies(200, { status: 'READY', pages: 1, summary: {} });
+    await setup().service.upload('o1', 'dana@example.com', pdf());
+    expect(sent().get('session_minutes')).toBe('30');
+    expect(sent().get('allow_ai')).toBe('true');
+  });
+
+  it("past today's cap the PDF is still read and saved, but not summarised", async () => {
+    aiReplies(200, {
+      status: 'UNAVAILABLE',
+      pages: 1,
+      message: "Today's limit…",
+    });
+    const { service, budget } = setup();
+    budget.take.mockResolvedValue(false);
+    const { brief } = await service.upload('o1', 'dana@example.com', pdf());
+    expect(sent().get('allow_ai')).toBe('false');
+    expect(brief).toMatchObject({ status: 'UNAVAILABLE', source: 'NONE' });
+    expect(files.saveBriefFile).toHaveBeenCalled();
+  });
+
+  it('allows 5 uploads per hour per account', async () => {
+    aiReplies(200, { status: 'READY', pages: 1, summary: {} });
+    const { service } = setup();
+    for (let i = 0; i < 5; i++)
+      await service.upload('o1', 'dana@example.com', pdf());
+    const err = await service
+      .upload('o1', 'dana@example.com', pdf())
+      .catch((e: HttpException) => e);
+    expect((err as HttpException).getStatus()).toBe(429);
+  });
+
+  it('serves the original from storage to the people allowed to see it', async () => {
+    const { service, prisma } = setup();
+    prisma.brief.findUnique.mockResolvedValue({
+      storedPath: 'o1-x.pdf',
+      filename: 'plan.pdf',
+    });
+    await expect(
+      service.file('o1', 'jason@consultly.test'),
+    ).resolves.toMatchObject({ filename: 'plan.pdf' });
+    expect(files.readBriefFile).toHaveBeenCalledWith('o1-x.pdf');
   });
 });

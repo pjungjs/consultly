@@ -34,7 +34,7 @@ async function Featured() {
                 <p className="mt-1 text-sm">{c.headline}</p>
               </div>
               <p className="text-sm text-muted">
-                {c.category}, in {cityFromZone(c.timezone)} · <span className="text-ink">{formatPrice(c.rateCents)}</span> an hour
+                {c.category}, in {cityFromZone(c.timezone)} · <span className="text-ink">{formatPrice(c.rateCents)}</span> · {c.slotMinutes} min
               </p>
             </Link>
           </li>
@@ -50,7 +50,7 @@ export default function Home() {
     <div className="landing-page space-y-28 sm:space-y-36">
       <section className="landing-hero space-y-6 pt-4">
         <h1 className="max-w-3xl font-display text-5xl font-semibold leading-[1.05] tracking-tight sm:text-7xl">
-          Book an hour with someone who has done it before.
+          Book time with someone who has done it before.
         </h1>
         <p className="max-w-xl text-lg text-muted">
           Consultly connects you with independent experts in strategy, tech, design, finance and contracts. See their real open hours, pay once, and get on a call.

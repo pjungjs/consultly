@@ -314,3 +314,12 @@ def test_endpoint_validates_the_conversation():
         ).status_code
         == 422
     )
+
+
+def test_live_chat_sends_only_recent_messages_starting_with_the_user():
+    history = [
+        {"role": "user" if i % 2 == 0 else "assistant", "content": str(i)}
+        for i in range(15)
+    ]
+    sent = support.recent(history)
+    assert len(sent) <= 10 and sent[0]["role"] == "user" and sent[-1]["content"] == "14"

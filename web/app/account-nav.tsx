@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { API_URL, PROFILE_UPDATED, type Me } from "@/lib/api";
+import { apiFetch, PROFILE_UPDATED, type Me } from "@/lib/api";
 
 // One round button with your initial opens a small account menu; signed out, a plain "Sign in" link.
 export default function AccountNav() {
@@ -15,7 +15,7 @@ export default function AccountNav() {
 
   useEffect(() => {
     const load = () =>
-      fetch(`${API_URL}/me`, { credentials: "include", cache: "no-store" })
+      apiFetch(`/me`, { credentials: "include", cache: "no-store" })
         .then((res) => (res.ok ? res.json() : null))
         .then(setMe)
         .catch(() => setMe(null));
@@ -51,7 +51,7 @@ export default function AccountNav() {
 
   async function signOut() {
     setOpen(false);
-    await fetch(`${API_URL}/auth/logout`, { method: "POST", credentials: "include" });
+    await apiFetch(`/auth/logout`, { method: "POST", credentials: "include" });
     setMe(null);
     router.push("/");
     router.refresh();
@@ -74,7 +74,10 @@ export default function AccountNav() {
       </button>
       {open && (
         <div role="menu" className="account-nav-menu absolute right-0 z-20 mt-2 w-56 overflow-hidden rounded-sm border border-rule bg-sheet py-1 text-sm shadow-lg">
-          <p className="truncate px-4 pt-2 pb-2 text-xs text-muted">{me.email}</p>
+          <p className="truncate px-4 pt-2 pb-2 text-xs text-muted">
+            {/* Demo accounts have made-up addresses; name the side instead. */}
+            {me.demo ? (me.demo.role === "client" ? "Demo client" : "Demo consultant") : me.email}
+          </p>
           <Link role="menuitem" href="/my-bookings" onClick={() => setOpen(false)} className={item("/my-bookings")}>
             My bookings
           </Link>

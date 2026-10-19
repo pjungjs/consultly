@@ -1,15 +1,20 @@
 import {
   BadGatewayException,
   ForbiddenException,
+  HttpException,
+  HttpStatus,
   Injectable,
   Logger,
   UnauthorizedException,
 } from '@nestjs/common';
 import { EmailService } from '../email/email.service.js';
 import { PrismaService } from '../prisma/prisma.service.js';
+import { sessionEmail } from './session.js';
 import { hashToken, newToken } from './tokens.js';
 
 const LINK_MINUTES = 15;
+// At most this many sign-in links per address per LINK_MINUTES: stops inbox flooding and burning the email quota.
+export const LINKS_PER_ADDRESS = 3;
 export const SESSION_DAYS = 7;
 
 // Only outside production may the API hand a sign-in link back to the browser.
@@ -31,6 +36,19 @@ export class AuthService {
    */
   async requestLink(rawEmail: string) {
     const email = rawEmail.trim().toLowerCase();
+    // Counted in the database, so the limit holds across restarts. Same answer for every address, so it
+    // reveals nothing about which emails have accounts.
+    const recent = await this.prisma.loginToken.count({
+      where: {
+        email,
+        createdAt: { gt: new Date(Date.now() - LINK_MINUTES * 60_000) },
+      },
+    });
+    if (recent >= LINKS_PER_ADDRESS)
+      throw new HttpException(
+        'Several sign-in links were sent to this address recently. Use the latest one, or try again in a few minutes.',
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
     const token = newToken();
     await this.prisma.loginToken.create({
       data: {
@@ -79,12 +97,17 @@ export class AuthService {
     const { email } = await this.prisma.loginToken.findUniqueOrThrow({
       where: { tokenHash: hashToken(token) },
     });
+    return this.startSession(email);
+  }
+
+  /** Creates a session for this email and returns the raw id for the cookie (only its hash is stored). */
+  async startSession(email: string) {
     const sessionId = newToken();
     await this.prisma.session.create({
       data: {
         email,
         tokenHash: hashToken(sessionId),
-        expiresAt: new Date(now.getTime() + SESSION_DAYS * 86_400_000),
+        expiresAt: new Date(Date.now() + SESSION_DAYS * 86_400_000),
       },
     });
     return sessionId;
@@ -93,12 +116,9 @@ export class AuthService {
   /** Resolves the cookie to an email, or throws 401. */
   async emailFor(sessionId: string | undefined) {
     if (!sessionId) throw new UnauthorizedException('Not signed in');
-    const session = await this.prisma.session.findUnique({
-      where: { tokenHash: hashToken(sessionId) },
-    });
-    if (!session || session.expiresAt <= new Date())
-      throw new UnauthorizedException('Session expired');
-    return session.email;
+    const email = await sessionEmail(this.prisma, sessionId);
+    if (!email) throw new UnauthorizedException('Session expired');
+    return email;
   }
 
   /** The consultant profile behind this session, or 403. */
@@ -123,13 +143,18 @@ export class AuthService {
       orderBy: { createdAt: 'desc' },
       select: { clientName: true, clientTimezone: true },
     });
+    // A consultant's name doubles as their own name until they change it.
+    const consultant = await this.prisma.consultant.findUnique({
+      where: { email },
+      select: { name: true, timezone: true },
+    });
     // upsert, not create: two tabs loading at once must not both try to insert.
     return this.prisma.client.upsert({
       where: { email },
       create: {
         email,
-        name: last?.clientName ?? null,
-        timezone: last?.clientTimezone ?? null,
+        name: last?.clientName ?? consultant?.name ?? null,
+        timezone: last?.clientTimezone ?? consultant?.timezone ?? null,
       },
       update: {},
     });

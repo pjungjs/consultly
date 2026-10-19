@@ -26,13 +26,16 @@ export class CreateOrderDto {
   @IsISO8601({ strict: true }, { each: true })
   startsAt: string[];
 
+  // Only when signed out: a signed-in booking uses the account's email and profile name.
+  @IsOptional()
   @IsString()
   @IsNotEmpty()
   @MaxLength(100)
-  clientName: string;
+  clientName?: string;
 
+  @IsOptional()
   @IsEmail()
-  clientEmail: string;
+  clientEmail?: string;
 
   @IsOptional()
   @IsTimeZone()

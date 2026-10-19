@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { API_URL, CLIENT_CANCEL_HOURS, formatPrice, type Consultant, type Me } from "@/lib/api";
+import { apiFetch, CLIENT_CANCEL_HOURS, formatPrice, type Consultant, type Me } from "@/lib/api";
 import { buildWeeks, dayKey, keyLabel, monthCells, shiftMonth, type Day } from "@/lib/calendar";
 import CalendarToolbar, { type CalendarView } from "../../calendar-toolbar";
 import { cityFromZone, timeIn } from "@/lib/zone";
@@ -41,7 +41,7 @@ export default function SlotPicker({
 
   // Signed-in clients get their email filled and locked, and their last-used name prefilled.
   useEffect(() => {
-    fetch(`${API_URL}/me`, { credentials: "include", cache: "no-store" })
+    apiFetch(`/me`, { credentials: "include", cache: "no-store" })
       .then((res) => (res.ok ? (res.json() as Promise<Me>) : null))
       .then(setMe)
       .catch(() => {});
@@ -64,14 +64,16 @@ export default function SlotPicker({
     if (selected.length === 0) return;
     setSubmitting(true);
     setError(null);
-    const res = await fetch(`${API_URL}/orders`, {
+    const res = await apiFetch(`/orders`, {
       method: "POST",
+      credentials: "include", // free sessions use the signed-in account
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         consultantId: consultant.id,
         startsAt: selected,
-        clientName: form.get("name"),
-        clientEmail: form.get("email"),
+        // Only sent when signed out; the API ignores them for a signed-in account.
+        clientName: form.get("name") ?? undefined,
+        clientEmail: form.get("email") ?? undefined,
         // The time zone from their profile, else this browser's; used for times in their emails.
         clientTimezone: me?.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone,
       }),
@@ -314,46 +316,42 @@ export default function SlotPicker({
             ) : (
               <p className="text-sm text-muted">Choose a time to continue.</p>
             )}
-            {step === "pick" && (
+            {/* Free sessions need a signed-in (proven) email; the API enforces it too. */}
+            {step === "pick" && consultant.rateCents === 0 && !me && (
+              <a href="/my-bookings" className="rounded-sm bg-ink px-5 py-2.5 text-sm font-medium text-paper">
+                Sign in to book this free session
+              </a>
+            )}
+            {step === "pick" && !(consultant.rateCents === 0 && !me) && (
               <button
                 disabled={selected.length === 0}
                 onClick={() => setStep("details")}
                 className="rounded-sm bg-ink px-5 py-2.5 text-sm font-medium text-paper disabled:opacity-40"
               >
-                Continue to payment
+                {consultant.rateCents === 0 ? "Continue" : "Continue to payment"}
               </button>
             )}
           </div>
           {step === "details" && selected.length > 0 && (
             <form action={book} className="slot-picker-details-form flex flex-wrap items-end gap-3">
-              <label className="flex flex-col gap-1 text-sm">
-                Your name
-                <input
-                  name="name"
-                  required
-                  maxLength={100}
-                  autoComplete="name"
-                  defaultValue={me?.name ?? ""}
-                  className="w-56 rounded-sm border border-rule bg-sheet px-3 py-2"
-                />
-              </label>
-              <label className="flex flex-col gap-1 text-sm">
-                {me ? "Signed in as" : "Email for the confirmation"}
-                <input
-                  name="email"
-                  type="email"
-                  required
-                  autoComplete="email"
-                  readOnly={!!me}
-                  defaultValue={me?.email ?? ""}
-                  className={`w-64 rounded-sm border border-rule px-3 py-2 ${me ? "bg-paper text-muted" : "bg-sheet"}`}
-                />
-              </label>
+              {/* Signed in, the account's name and email are used: nothing to fill in. */}
+              {!me && (
+                <>
+                  <label className="flex flex-col gap-1 text-sm">
+                    Your name
+                    <input name="name" required maxLength={100} autoComplete="name" className="w-56 rounded-sm border border-rule bg-sheet px-3 py-2" />
+                  </label>
+                  <label className="flex flex-col gap-1 text-sm">
+                    Email for the confirmation
+                    <input name="email" type="email" required autoComplete="email" className="w-64 rounded-sm border border-rule bg-sheet px-3 py-2" />
+                  </label>
+                </>
+              )}
               <button
                 disabled={submitting}
                 className="rounded-sm bg-ink px-5 py-2.5 text-sm font-medium text-paper disabled:opacity-40"
               >
-                {submitting ? "Holding your times…" : `Pay ${total}`}
+                {submitting ? "Holding your times…" : consultant.rateCents === 0 ? "Book for free" : `Pay ${total}`}
               </button>
               <button
                 type="button"
@@ -363,7 +361,7 @@ export default function SlotPicker({
                 Change times
               </button>
               <p className="basis-full text-xs text-muted">
-                We hold these times for 30 minutes while you pay on Stripe.
+                {consultant.rateCents === 0 ? "Free session: no payment needed. You'll get a confirmation email." : "We hold these times for 30 minutes while you pay on Stripe."}
               </p>
             </form>
           )}

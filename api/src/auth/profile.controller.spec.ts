@@ -1,4 +1,4 @@
-import { ConflictException } from '@nestjs/common';
+import { ConflictException, ForbiddenException } from '@nestjs/common';
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
 import { listingStatus } from './listing-status.js';
@@ -27,6 +27,7 @@ const form = {
   category: 'Strategy',
   rateCents: 12000,
   timezone: 'Europe/Paris',
+  slotMinutes: 60,
 };
 
 function setup() {
@@ -138,5 +139,35 @@ describe('ConsultantProfileDto', () => {
       }),
     ).toEqual(['category', 'rateCents', 'timezone']);
     expect(await errors({ rateCents: 100_001 })).toEqual(['rateCents']);
+  });
+});
+
+describe('session length', () => {
+  it('accepts 30 or 60 minutes only', async () => {
+    const errors = async (slotMinutes: number) =>
+      (
+        await validate(
+          plainToInstance(ConsultantProfileDto, { ...form, slotMinutes }),
+        )
+      ).map((e) => e.property);
+    expect(await errors(30)).toEqual([]);
+    expect(await errors(45)).toEqual(['slotMinutes']);
+  });
+});
+
+describe('demo accounts', () => {
+  it('edit their own private profiles, but cannot open a public consultant profile', async () => {
+    const { controller, auth, prisma } = setup();
+    auth.emailFor.mockResolvedValue('demo-0123456789ab@consultly.test');
+    auth.consultantFor.mockResolvedValue({ id: 'c1' });
+    prisma.consultant.update.mockResolvedValue(row());
+    await expect(
+      controller.saveClient(req, { name: 'My name', timezone: 'UTC' }),
+    ).resolves.toBeDefined();
+    await expect(controller.saveConsultant(req, form)).resolves.toBeDefined();
+    await expect(controller.becomeConsultant(req, form)).rejects.toBeInstanceOf(
+      ForbiddenException,
+    );
+    expect(prisma.consultant.create).not.toHaveBeenCalled();
   });
 });

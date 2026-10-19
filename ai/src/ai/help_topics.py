@@ -27,6 +27,7 @@ TOPICS: tuple[Topic, ...] = (
             "multiple",
         ),
         "Open a consultant's profile from /consultants, pick one or more times (up to 6 at once), then pay once on Stripe. "
+        "Sessions are 30 or 60 minutes, depending on the consultant; new here? Book the free 30-minute onboarding call with Consultly Onboarding. "
         "Your times are held for 30 minutes while you pay. You get a confirmation email, and every booking is in /my-bookings.",
     ),
     Topic(

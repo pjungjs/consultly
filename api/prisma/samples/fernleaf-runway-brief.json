@@ -29,10 +29,22 @@
     "Unclear whether the price increase applies to existing bakeries or only new ones after the first year."
   ],
   "agenda": [
-    { "minutes": 10, "topic": "Confirm current numbers and runway at today's burn (about 14 months)" },
-    { "minutes": 15, "topic": "Hiring now vs at $600k ARR: effect on runway and the November 20 board update" },
-    { "minutes": 15, "topic": "Modelling the $129 plan: churn sensitivity and payback" },
-    { "minutes": 15, "topic": "Series A story: which metrics to lead with, and what's missing" },
+    {
+      "minutes": 10,
+      "topic": "Confirm current numbers and runway at today's burn (about 14 months)"
+    },
+    {
+      "minutes": 15,
+      "topic": "Hiring now vs at $600k ARR: effect on runway and the November 20 board update"
+    },
+    {
+      "minutes": 15,
+      "topic": "Modelling the $129 plan: churn sensitivity and payback"
+    },
+    {
+      "minutes": 15,
+      "topic": "Series A story: which metrics to lead with, and what's missing"
+    },
     { "minutes": 5, "topic": "Next steps before the board update" }
   ]
 }

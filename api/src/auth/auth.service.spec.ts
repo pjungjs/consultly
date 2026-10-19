@@ -1,6 +1,7 @@
 import {
   BadGatewayException,
   ForbiddenException,
+  HttpException,
   UnauthorizedException,
 } from '@nestjs/common';
 import { AuthService } from './auth.service.js';
@@ -9,6 +10,7 @@ import { hashToken, newToken } from './tokens.js';
 function setup() {
   const prisma = {
     loginToken: {
+      count: vi.fn().mockResolvedValue(0), // links sent to this address in the last 15 minutes
       create: vi.fn(),
       updateMany: vi.fn().mockResolvedValue({ count: 1 }),
       findUniqueOrThrow: vi
@@ -20,6 +22,7 @@ function setup() {
     client: {
       findUnique: vi.fn().mockResolvedValue(null),
       upsert: vi.fn().mockImplementation(({ create }) => create),
+      update: vi.fn(),
     },
     order: { findFirst: vi.fn().mockResolvedValue(null) },
   };
@@ -189,5 +192,20 @@ describe('AuthService.ensureClient', () => {
       service.ensureClient('dana@example.com'),
     ).resolves.toMatchObject({ name: 'Dana', timezone: 'Asia/Seoul' });
     expect(prisma.client.upsert.mock.calls[0][0].update).toEqual({}); // a concurrent insert wins; nothing is overwritten
+  });
+});
+
+describe('sign-in email limit', () => {
+  it('sends at most 3 links per address per 15 minutes, without contacting the email service', async () => {
+    const { service, prisma, email } = setup();
+    prisma.loginToken.count.mockResolvedValue(3);
+    const err = (await service
+      .requestLink('Dana@example.com')
+      .catch((e: HttpException) => e)) as HttpException;
+    expect(err.getStatus()).toBe(429);
+    expect(prisma.loginToken.count.mock.calls[0][0].where.email).toBe(
+      'dana@example.com',
+    );
+    expect(email.send).not.toHaveBeenCalled();
   });
 });

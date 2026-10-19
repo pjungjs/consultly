@@ -1,7 +1,16 @@
-export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
+/**
+ * Where to reach the API. In the browser: NEXT_PUBLIC_API_URL, which is "/api" when deployed, so requests go to
+ * this site and Next.js forwards them (see next.config.ts). That keeps the sign-in cookie first-party without
+ * a custom domain. On the server: API_INTERNAL_URL, the API's real address. Locally both default to :4000.
+ */
+export const API_URL =
+  typeof window === "undefined"
+    ? (process.env.API_INTERNAL_URL ?? process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000")
+    : (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000");
 
 export interface Consultant {
   id: string;
+  demo?: boolean; // a demo visitor's private copy
   name: string;
   headline: string;
   category: string;
@@ -34,6 +43,8 @@ export interface Me {
   name: string | null;
   timezone: string | null;
   consultant: { id: string; name: string } | null;
+  /** Set for a "Try the demo" account: which side you're on, and your private demo consultant. */
+  demo: { role: "client" | "consultant"; consultantId: string | null } | null;
 }
 
 export interface DashboardSession {
@@ -41,6 +52,8 @@ export interface DashboardSession {
   startsAt: string;
   endsAt: string;
   amountCents: number;
+  status: "CONFIRMED" | "CANCELLED";
+  cancelledBy: "CLIENT" | "CONSULTANT" | null;
   order: { id: string; clientName: string; clientEmail: string; clientTimezone: string; brief: BriefBadge | null };
 }
 
@@ -64,11 +77,59 @@ export interface AvailabilitySnapshot {
   conflicts: { id: string; startsAt: string; clientName: string }[];
 }
 
+/** A failed API call; `status` lets pages tell "not found" (404) apart from real errors. */
+export class ApiError extends Error {
+  constructor(
+    readonly status: number,
+    message: string,
+  ) {
+    super(message);
+  }
+}
+
 export async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${API_URL}${path}`, { cache: "no-store", ...init });
-  if (!res.ok) throw new Error(`${init?.method ?? "GET"} ${path} failed: ${res.status}`);
+  if (!res.ok) throw new ApiError(res.status, `${init?.method ?? "GET"} ${path} failed: ${res.status}`);
   return res.json() as Promise<T>;
 }
+
+/** Window event that shows an error toast (see app/toaster.tsx). */
+export const TOAST_EVENT = "consultly:toast";
+
+export function showErrorToast(message: string) {
+  window.dispatchEvent(new CustomEvent(TOAST_EVENT, { detail: message }));
+}
+
+const GENERIC_SERVER_MESSAGE = "Internal server error";
+
+/**
+ * fetch() for browser calls to the API. Unexpected failures (no connection, a server error, a sleeping server
+ * behind the proxy) show a toast and come back as a JSON response with `message: null`, so the caller's usual
+ * `if (!res.ok)` path runs without also showing an inline message. Expected errors (4xx, or a 5xx that explains
+ * itself, like a failed email) pass through untouched for the caller to show where they belong.
+ */
+export async function apiFetch(path: string, init?: RequestInit): Promise<Response> {
+  const unexpected = (message: string, status: number) => {
+    showErrorToast(message);
+    return new Response(JSON.stringify({ message: null }), { status, headers: { "Content-Type": "application/json" } });
+  };
+  let res: Response;
+  try {
+    res = await fetch(`${API_URL}${path}`, init);
+  } catch {
+    return unexpected("Couldn't reach Consultly. Check your connection and try again.", 503);
+  }
+  if (res.status < 500) return res;
+  const body = await res
+    .clone()
+    .json()
+    .catch(() => null);
+  const message = typeof body?.message === "string" ? body.message : null;
+  if (message && message !== GENERIC_SERVER_MESSAGE) return res;
+  return unexpected("Something went wrong on our side. Please try again in a moment.", res.status);
+}
+
+export const isNotFound = (err: unknown) => err instanceof ApiError && err.status === 404;
 
 export interface ConsultantProfile {
   id: string;
@@ -77,6 +138,7 @@ export interface ConsultantProfile {
   bio: string;
   category: string;
   rateCents: number;
+  slotMinutes: number;
   timezone: string;
   paused: boolean;
   status: ListingStatus;
@@ -94,6 +156,14 @@ export interface Profile {
   timezone: string | null;
   consultant: ConsultantProfile | null;
 }
+
+/** How to name the signed-in account: demo accounts have made-up addresses, so they're named by their side. */
+export const accountLabel = (email: string) =>
+  /^demo-[a-f0-9]{12}@consultly\.test$/i.test(email)
+    ? "the Demo client"
+    : /^jason-[a-f0-9]{12}@consultly\.test$/i.test(email)
+      ? "the Demo consultant"
+      : email;
 
 /** Window event fired after a profile save, so the account menu can refresh without a page change. */
 export const PROFILE_UPDATED = "consultly:profile-updated";
@@ -126,4 +196,6 @@ export interface Brief extends BriefBadge {
 export const CATEGORIES = ["Strategy", "Tech", "Design", "Finance", "Legal & pricing"] as const;
 
 export const formatPrice = (cents: number) =>
-  new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", minimumFractionDigits: cents % 100 ? 2 : 0 }).format(cents / 100);
+  cents === 0
+    ? "Free"
+    : new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", minimumFractionDigits: cents % 100 ? 2 : 0 }).format(cents / 100);

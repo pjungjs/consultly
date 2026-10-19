@@ -12,7 +12,7 @@ export class ConsultantsController {
 
   @Get(':id')
   get(@Param('id') id: string) {
-    return this.consultants.get(id);
+    return this.consultants.profile(id);
   }
 
   @Get(':id/slots')

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { API_URL, type Brief } from "@/lib/api";
+import { API_URL, apiFetch, type Brief } from "@/lib/api";
 import PrepSheet, { summarySource } from "./prep-sheet";
 
 /** Read-only brief for the consultant's dashboard: fetched when the row is opened. */
@@ -9,7 +9,7 @@ export default function BriefView({ orderId }: { orderId: string }) {
   const [brief, setBrief] = useState<Brief | null | undefined>(undefined);
 
   useEffect(() => {
-    fetch(`${API_URL}/me/orders/${orderId}/brief`, { credentials: "include", cache: "no-store" })
+    apiFetch(`/me/orders/${orderId}/brief`, { credentials: "include", cache: "no-store" })
       .then((res) => (res.ok ? res.json() : { brief: null }))
       .then((body) => setBrief(body.brief))
       .catch(() => setBrief(null));

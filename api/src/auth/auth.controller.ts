@@ -4,6 +4,8 @@ import {
   ForbiddenException,
   Get,
   HttpCode,
+  HttpException,
+  HttpStatus,
   Param,
   Post,
   Req,
@@ -11,13 +13,52 @@ import {
 } from '@nestjs/common';
 import type { Request, Response } from 'express';
 import { DateTime } from 'luxon';
-import { IsEmail, IsNotEmpty, IsString } from 'class-validator';
+import {
+  IsEmail,
+  IsIn,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+} from 'class-validator';
 import { OrdersService } from '../orders/orders.service.js';
+import { RateLimiter } from '../support/rate-limiter.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { AuthService, SESSION_DAYS } from './auth.service.js';
+import {
+  DEMO_COOKIE,
+  type DemoRole,
+  demoIdOf,
+  demoRoleOf,
+  isDemoLoginEnabled,
+} from './demo.js';
+import { DemoService } from './demo.service.js';
 import { listingStatus } from './listing-status.js';
 
-export const COOKIE = 'consultly_session';
+import { COOKIE } from './session.js';
+
+export { COOKIE };
+
+// HttpOnly so page scripts can never read it; Lax so it isn't sent on cross-site POSTs.
+function setCookie(res: Response, name: string, value: string) {
+  res.cookie(name, value, {
+    httpOnly: true,
+    sameSite: 'lax',
+    secure: process.env.NODE_ENV === 'production',
+    maxAge: SESSION_DAYS * 86_400_000,
+  });
+}
+
+class DemoTimezoneDto {
+  // The visitor's browser zone: their demo consultant works in it, so times line up.
+  @IsOptional()
+  @IsString()
+  timezone?: string;
+}
+
+class DemoDto extends DemoTimezoneDto {
+  @IsIn(['client', 'consultant'])
+  role: DemoRole;
+}
 
 class RequestLinkDto {
   @IsEmail()
@@ -32,15 +73,29 @@ class VerifyDto {
 
 @Controller()
 export class AuthController {
+  // 10 sign-in emails per hour per visitor.
+  private readonly linkRequests = new RateLimiter(10, 60 * 60_000);
+  // 10 demo sign-ins per hour per visitor: each one creates a session row.
+  private readonly demoSignIns = new RateLimiter(10, 60 * 60_000);
+  // Each reset deletes and recreates a demo pair.
+  private readonly demoResets = new RateLimiter(10, 60 * 60_000);
+
   constructor(
     private readonly auth: AuthService,
+    private readonly demos: DemoService,
     private readonly prisma: PrismaService,
     private readonly orders: OrdersService,
   ) {}
 
   @Post('auth/magic-link')
   @HttpCode(202)
-  async requestLink(@Body() dto: RequestLinkDto) {
+  async requestLink(@Req() req: Request, @Body() dto: RequestLinkDto) {
+    // Per visitor too, so one bot can't spray links across many addresses.
+    if (!this.linkRequests.allow(req.ip ?? 'unknown'))
+      throw new HttpException(
+        'Too many sign-in requests from this network. Please try again later.',
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
     await this.auth.requestLink(dto.email);
     return { sent: true };
   }
@@ -51,15 +106,52 @@ export class AuthController {
     @Body() dto: VerifyDto,
     @Res({ passthrough: true }) res: Response,
   ) {
-    const sessionId = await this.auth.verify(dto.token);
-    // HttpOnly so page scripts can never read it; Lax so it isn't sent on cross-site POSTs.
-    res.cookie(COOKIE, sessionId, {
-      httpOnly: true,
-      sameSite: 'lax',
-      secure: process.env.NODE_ENV === 'production',
-      maxAge: SESSION_DAYS * 86_400_000,
-    });
+    setCookie(res, COOKIE, await this.auth.verify(dto.token));
     return { signedIn: true };
+  }
+
+  /** Whether the "Try the demo" buttons should show (deployed portfolio site only). */
+  @Get('auth/demo')
+  demoAvailable() {
+    return { enabled: isDemoLoginEnabled() };
+  }
+
+  @Post('auth/demo')
+  @HttpCode(200)
+  async demo(
+    @Req() req: Request,
+    @Body() dto: DemoDto,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    if (!this.demoSignIns.allow(req.ip ?? 'unknown'))
+      throw new HttpException(
+        'Too many demo sign-ins from this network. Please try again later.',
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    // Switching sides replaces the current sign-in rather than piling up sessions (unused demos get cleaned up).
+    await this.auth.logout(req.cookies?.[COOKIE]);
+    const { sessionId, demoToken, role } = await this.demos.start(
+      dto.role,
+      req.cookies?.[DEMO_COOKIE],
+      dto.timezone,
+    );
+    setCookie(res, COOKIE, sessionId);
+    setCookie(res, DEMO_COOKIE, demoToken);
+    return { signedIn: true, role };
+  }
+
+  /** The signed-in visitor's demo client and consultant go back to the defaults. */
+  @Post('auth/demo/reset')
+  @HttpCode(200)
+  async resetDemo(@Req() req: Request, @Body() dto: DemoTimezoneDto) {
+    const email = await this.auth.emailFor(req.cookies?.[COOKIE]);
+    if (!this.demoResets.allow(req.ip ?? 'unknown'))
+      throw new HttpException(
+        'The demo was reset several times recently. Please try again later.',
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    await this.demos.reset(email, dto.timezone);
+    return { reset: true };
   }
 
   @Post('auth/logout')
@@ -80,7 +172,19 @@ export class AuthController {
     });
     // The name from their profile prefills the booking form.
     const client = await this.auth.ensureClient(email);
-    return { email, name: client.name, timezone: client.timezone, consultant };
+    const demoId = demoIdOf(email);
+    // Demo accounts: which side you're on, and your private consultant copy (for links to it).
+    const demo = demoId && {
+      role: demoRoleOf(email),
+      consultantId: (await this.demos.consultantFor(demoId))?.id ?? null,
+    };
+    return {
+      email,
+      name: client.name,
+      timezone: client.timezone,
+      consultant,
+      demo: demo || null,
+    };
   }
 
   /** Everything the consultant dashboard shows, in one round trip. */
@@ -95,14 +199,24 @@ export class AuthController {
         'This email is not linked to a consultant profile',
       );
 
-    const bookings = await this.prisma.booking.findMany({
-      where: { consultantId: consultant.id, status: 'CONFIRMED' },
+    // Booked sessions, plus ones cancelled after booking (cancelledBy is set) so the consultant sees them too.
+    // Unpaid holds that simply expired are left out.
+    const sessions = await this.prisma.booking.findMany({
+      where: {
+        consultantId: consultant.id,
+        OR: [
+          { status: 'CONFIRMED' },
+          { status: 'CANCELLED', cancelledBy: { not: null } },
+        ],
+      },
       orderBy: { startsAt: 'asc' },
       select: {
         id: true,
         startsAt: true,
         endsAt: true,
         amountCents: true,
+        status: true,
+        cancelledBy: true,
         order: {
           select: {
             id: true,
@@ -120,9 +234,11 @@ export class AuthController {
     const weekStartDt = sunday.minus({ days: sunday.weekday % 7 });
     const weekStart = weekStartDt.toJSDate();
     const weekEnd = weekStartDt.plus({ days: 7 }).toJSDate();
-    const upcoming = bookings.filter((b) => b.endsAt > new Date());
-    const past = bookings.filter((b) => b.endsAt <= new Date()).reverse();
-    const sum = (list: typeof bookings) =>
+    const upcoming = sessions.filter((b) => b.endsAt > new Date());
+    const past = sessions.filter((b) => b.endsAt <= new Date()).reverse();
+    // Money and counts only include sessions that are still booked.
+    const bookings = sessions.filter((b) => b.status === 'CONFIRMED');
+    const sum = (list: typeof sessions) =>
       list.reduce((cents, b) => cents + b.amountCents, 0);
 
     return {
@@ -145,7 +261,7 @@ export class AuthController {
             (b) => b.startsAt >= weekStart && b.startsAt < weekEnd,
           ),
         ),
-        upcomingCount: upcoming.length,
+        upcomingCount: upcoming.filter((b) => b.status === 'CONFIRMED').length,
         earnedCents: sum(bookings),
       },
       upcoming,

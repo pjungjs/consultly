@@ -26,9 +26,18 @@
     "Unclear whether payouts currently use Stripe idempotency keys or any record of what was paid."
   ],
   "agenda": [
-    { "minutes": 10, "topic": "Walk through the booking flow and the race between check and insert" },
-    { "minutes": 20, "topic": "Options to prevent double bookings, and a plan to ship one before November 30" },
-    { "minutes": 15, "topic": "Payout design: batch vs per-booking transfers, and auditing past runs" },
+    {
+      "minutes": 10,
+      "topic": "Walk through the booking flow and the race between check and insert"
+    },
+    {
+      "minutes": 20,
+      "topic": "Options to prevent double bookings, and a plan to ship one before November 30"
+    },
+    {
+      "minutes": 15,
+      "topic": "Payout design: batch vs per-booking transfers, and auditing past runs"
+    },
     { "minutes": 10, "topic": "Idempotent webhooks and payouts" },
     { "minutes": 5, "topic": "Priorities for the next four weeks" }
   ]

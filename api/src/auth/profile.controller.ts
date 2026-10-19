@@ -1,6 +1,7 @@
 import {
   Body,
   ConflictException,
+  ForbiddenException,
   Controller,
   Get,
   Post,
@@ -23,6 +24,7 @@ import { CATEGORIES } from '../consultants/categories.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { COOKIE } from './auth.controller.js';
 import { AuthService } from './auth.service.js';
+import { demoIdOf } from './demo.js';
 import { listingStatus } from './listing-status.js';
 
 export class ClientProfileDto {
@@ -60,6 +62,10 @@ export class ConsultantProfileDto {
   @Max(100000)
   rateCents: number;
 
+  /** Length of one session: 30 or 60 minutes. */
+  @IsIn([30, 60])
+  slotMinutes: number;
+
   @IsTimeZone()
   timezone: string;
 }
@@ -69,6 +75,17 @@ export class ConsultantStatusDto {
   paused: boolean;
 }
 
+/**
+ * A demo visitor edits only their private pair. Opening a new consultant profile would publish their text in the
+ * public catalogue, so the demo client can't; it already has its own demo consultant.
+ */
+function notForDemo(email: string) {
+  if (demoIdOf(email))
+    throw new ForbiddenException(
+      'The demo already has its own consultant: switch to it from the demo bar. Sign in with your own email to open a consultant profile.',
+    );
+}
+
 const CONSULTANT_FIELDS = {
   id: true,
   name: true,
@@ -76,6 +93,7 @@ const CONSULTANT_FIELDS = {
   bio: true,
   category: true,
   rateCents: true,
+  slotMinutes: true,
   timezone: true,
   paused: true,
   _count: { select: { availability: true } },
@@ -144,6 +162,7 @@ export class ProfileController {
         bio: dto.bio.trim(),
         category: dto.category,
         rateCents: dto.rateCents,
+        slotMinutes: dto.slotMinutes,
         timezone: dto.timezone,
       },
       select: CONSULTANT_FIELDS,
@@ -161,6 +180,7 @@ export class ProfileController {
     @Body() dto: ConsultantProfileDto,
   ) {
     const email = await this.auth.emailFor(req.cookies?.[COOKIE]);
+    notForDemo(email);
     if (await this.prisma.consultant.findUnique({ where: { email } }))
       throw new ConflictException('You already have a consultant profile');
     const created = await this.prisma.consultant.create({
@@ -171,6 +191,7 @@ export class ProfileController {
         bio: dto.bio.trim(),
         category: dto.category,
         rateCents: dto.rateCents,
+        slotMinutes: dto.slotMinutes,
         timezone: dto.timezone,
       },
       select: CONSULTANT_FIELDS,
