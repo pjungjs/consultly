@@ -1,0 +1,58 @@
+@import "tailwindcss";
+
+/* Cool paper + navy ink; highlighter yellow is reserved for the picked time. */
+:root {
+  --paper: #f6f7f9;
+  --sheet: #ffffff;
+  --ink: #14243b;
+  --muted: #66758a;
+  --rule: #d9dee6;
+  --highlight: #f5cf3a;
+  --on-highlight: #14243b;
+  --band: #d5deea; /* a tinted panel that sets screenshots apart from the page */
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --paper: #0f1726;
+    --sheet: #152036;
+    --ink: #e8edf5;
+    --muted: #93a1b5;
+    --rule: #2a3852;
+    --highlight: #f5cf3a;
+    --on-highlight: #14243b;
+    --band: #1e2d49;
+  }
+}
+
+@theme inline {
+  --color-paper: var(--paper);
+  --color-sheet: var(--sheet);
+  --color-ink: var(--ink);
+  --color-muted: var(--muted);
+  --color-rule: var(--rule);
+  --color-highlight: var(--highlight);
+  --color-on-highlight: var(--on-highlight);
+  --color-band: var(--band);
+  --font-sans: var(--font-plex);
+  --font-display: var(--font-bricolage);
+  --font-serif: var(--font-instrument);
+}
+
+body {
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-plex), system-ui, sans-serif;
+  font-variant-numeric: tabular-nums;
+}
+
+:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition: none !important;
+  }
+}

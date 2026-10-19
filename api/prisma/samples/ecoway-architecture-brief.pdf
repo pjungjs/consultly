@@ -1,0 +1,77 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [6 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+4 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>
+endobj
+5 0 obj
+<< /Length 2473 >>
+stream
+BT
+14 TL
+56 790 Td
+/F1 10.5 Tf () Tj T*
+/F2 12 Tf (EcoWay Pursuit: booking and payouts architecture review) Tj T*
+/F1 10.5 Tf (Prepared for: session with Jason Jefferson \(staff software engineer\)) Tj T*
+/F1 10.5 Tf (Company: EcoWay Pursuit, a marketplace for booking electric-vehicle charging bays at private) Tj T*
+/F1 10.5 Tf (sites) Tj T*
+/F1 10.5 Tf () Tj T*
+/F1 10.5 Tf () Tj T*
+/F2 12 Tf (Our system today) Tj T*
+/F1 10.5 Tf (Drivers book 30-minute charging slots at bays owned by hotels, offices and car parks. Site) Tj T*
+/F1 10.5 Tf (owners are paid out through Stripe Connect. The product is a Ruby on Rails monolith with one) Tj T*
+/F1 10.5 Tf (PostgreSQL database, a Sidekiq job queue and a React Native app. Four engineers work on it.) Tj T*
+/F1 10.5 Tf () Tj T*
+/F1 10.5 Tf (- About 40,000 bookings per month, with peaks on Friday afternoons) Tj T*
+/F1 10.5 Tf (- Roughly 0.3% of peak-hour bookings end up double-booked: two drivers get the same bay and) Tj T*
+/F1 10.5 Tf (    slot) Tj T*
+/F1 10.5 Tf (- Payouts to 180 site owners run as one nightly batch job, which has failed or partly failed) Tj T*
+/F1 10.5 Tf (    four times in the last two months) Tj T*
+/F1 10.5 Tf (- Stripe webhooks are processed inline in a Rails controller) Tj T*
+/F1 10.5 Tf () Tj T*
+/F1 10.5 Tf () Tj T*
+/F2 12 Tf (What is going wrong) Tj T*
+/F1 10.5 Tf (Double bookings cost us refunds and angry drivers. Our current check reads the bay's) Tj T*
+/F1 10.5 Tf (bookings, then inserts a new one if the slot looks free; we suspect two requests pass the) Tj T*
+/F1 10.5 Tf (check at the same moment. When the payout job fails halfway we re-run it by hand, and we are) Tj T*
+/F1 10.5 Tf (not fully sure some owners have not been paid twice.) Tj T*
+/F1 10.5 Tf () Tj T*
+/F1 10.5 Tf () Tj T*
+/F2 12 Tf (Questions for the session) Tj T*
+/F1 10.5 Tf (- What is the most reliable way to stop double bookings: database constraints, row locks, or) Tj T*
+/F1 10.5 Tf (    something else?) Tj T*
+/F1 10.5 Tf (- Should payouts move out of the nightly batch into per-booking transfers or a separate) Tj T*
+/F1 10.5 Tf (    service?) Tj T*
+/F1 10.5 Tf (- How should we make webhook handling and payouts safe to retry?) Tj T*
+/F1 10.5 Tf () Tj T*
+/F1 10.5 Tf () Tj T*
+/F2 12 Tf (Constraints) Tj T*
+/F1 10.5 Tf (We have a board demo on November 30 and want the double-booking fix live before then. We) Tj T*
+/F1 10.5 Tf (would rather not split the monolith into many services this year.) Tj T*
+ET
+endstream
+endobj
+6 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Contents 5 0 R /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> >>
+endobj
+xref
+0 7
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000115 00000 n 
+0000000185 00000 n 
+0000000260 00000 n 
+0000002785 00000 n 
+trailer
+<< /Size 7 /Root 1 0 R >>
+startxref
+2921
+%%EOF

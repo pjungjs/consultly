@@ -1,0 +1,35 @@
+{
+  "one_liner": "EcoWay Pursuit wants a reliable fix for double-booked charging bays and safer, retryable payouts before its November 30 board demo.",
+  "background": "EcoWay Pursuit is a marketplace for booking EV charging bays at private sites, built as a Rails monolith on PostgreSQL with Sidekiq and a React Native app. Four engineers maintain it, and site owners are paid through Stripe Connect.",
+  "goals": [
+    "Choose a way to make double bookings impossible, and ship it before November 30.",
+    "Decide how payouts should run instead of one fragile nightly batch.",
+    "Make webhook handling and payouts safe to retry without paying anyone twice."
+  ],
+  "key_facts": [
+    "About 40,000 bookings per month, peaking on Friday afternoons.",
+    "Roughly 0.3% of peak-hour bookings are double-booked.",
+    "The booking check reads existing bookings, then inserts if the slot looks free.",
+    "Payouts to 180 site owners run as one nightly batch, which failed fully or partly four times in two months.",
+    "Stripe webhooks are processed inline in a Rails controller.",
+    "Board demo on November 30; no plan to split the monolith this year."
+  ],
+  "questions": [
+    "Database constraints, row locks, or something else to stop double bookings?",
+    "Per-booking transfers or a separate payout service instead of the nightly batch?",
+    "How to make webhooks and payouts safe to retry?"
+  ],
+  "gaps": [
+    "Whether anyone has actually been paid twice after manual re-runs is unknown.",
+    "No numbers on peak requests per second or database load.",
+    "No detail on how bookings and slots are modelled in the schema.",
+    "Unclear whether payouts currently use Stripe idempotency keys or any record of what was paid."
+  ],
+  "agenda": [
+    { "minutes": 10, "topic": "Walk through the booking flow and the race between check and insert" },
+    { "minutes": 20, "topic": "Options to prevent double bookings, and a plan to ship one before November 30" },
+    { "minutes": 15, "topic": "Payout design: batch vs per-booking transfers, and auditing past runs" },
+    { "minutes": 10, "topic": "Idempotent webhooks and payouts" },
+    { "minutes": 5, "topic": "Priorities for the next four weeks" }
+  ]
+}

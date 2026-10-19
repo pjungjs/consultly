@@ -1,0 +1,38 @@
+{
+  "one_liner": "Fernleaf wants its runway model and pricing plan pressure-tested so it can make two decisions before a Q2 2027 Series A.",
+  "background": "Fernleaf sells weekly bread and pastry subscriptions for 310 independent bakeries, 22 months after launch. It raised a $1.2M seed round 11 months ago and has a team of 7. It plans to raise a Series A in Q2 2027 and does not want a bridge round.",
+  "goals": [
+    "Leave with a runway model the founders can defend in front of Series A investors.",
+    "Decide whether to hire two engineers now or after passing $600k ARR.",
+    "Know how to model the effect of a $79 to $129 price increase on churn and payback.",
+    "Pick the unit economics to lead with in the Series A deck."
+  ],
+  "key_facts": [
+    "$420k ARR, growing about 6% month over month for two quarters.",
+    "310 paying bakeries; monthly logo churn 2.8%.",
+    "Gross margin about 78%; blended CAC about $640 per bakery.",
+    "Net burn about $85k per month; $1.19M cash as of October 1.",
+    "Two more engineers would add about $32k per month fully loaded.",
+    "Multi-location support ships in December; the largest customers say they would pay more for it.",
+    "Board update with a hiring plan due to the lead seed investor by November 20."
+  ],
+  "questions": [
+    "What will Series A investors look at first in the runway model?",
+    "Should Fernleaf hire two engineers now or wait until $600k ARR?",
+    "How should the price increase be modelled for churn and payback?",
+    "Which unit economics should lead the Series A deck?"
+  ],
+  "gaps": [
+    "The runway spreadsheet is attached separately and isn't in this brief.",
+    "No cohort or net revenue retention data, which investors will ask for.",
+    "No CAC payback period or how CAC is split by channel.",
+    "Unclear whether the price increase applies to existing bakeries or only new ones after the first year."
+  ],
+  "agenda": [
+    { "minutes": 10, "topic": "Confirm current numbers and runway at today's burn (about 14 months)" },
+    { "minutes": 15, "topic": "Hiring now vs at $600k ARR: effect on runway and the November 20 board update" },
+    { "minutes": 15, "topic": "Modelling the $129 plan: churn sensitivity and payback" },
+    { "minutes": 15, "topic": "Series A story: which metrics to lead with, and what's missing" },
+    { "minutes": 5, "topic": "Next steps before the board update" }
+  ]
+}

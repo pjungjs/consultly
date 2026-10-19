@@ -1,0 +1,139 @@
+generator client {
+  provider            = "prisma-client"
+  output              = "../src/generated/prisma"
+  moduleFormat        = "esm"
+  importFileExtension = "js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Consultant {
+  id           String         @id @default(cuid())
+  name         String
+  email        String?        @unique // Signing in with this email unlocks the dashboard
+  headline     String
+  category     String         @default("Strategy") // one of the catalogue's filter chips
+  bio          String
+  rateCents    Int // price of one session, in cents
+  slotMinutes  Int            @default(60)
+  timezone     String // IANA zone, e.g. "America/New_York"
+  paused       Boolean        @default(false) // hidden from the catalogue and not bookable; existing bookings stay
+  availability Availability[]
+  bookings     Booking[]
+  orders       Order[]
+  timeOff      TimeOff[]
+}
+
+// Weekly recurring hours in the consultant's own wall-clock time.
+model Availability {
+  id           String     @id @default(cuid())
+  consultantId String
+  consultant   Consultant @relation(fields: [consultantId], references: [id], onDelete: Cascade)
+  weekday      Int // 1 = Monday ... 7 = Sunday (Luxon convention)
+  startTime    String // "09:00"
+  endTime      String // "17:00"
+}
+
+enum BookingStatus {
+  PENDING
+  CONFIRMED
+  CANCELLED
+}
+
+// One checkout: a client buying one or more sessions with one consultant.
+model Order {
+  id              String        @id @default(cuid())
+  consultantId    String
+  consultant      Consultant    @relation(fields: [consultantId], references: [id])
+  clientName      String
+  clientEmail     String
+  clientTimezone  String        @default("UTC") // so emails show times in the client's own zone
+  status          BookingStatus @default(PENDING)
+  holdExpiresAt   DateTime // = Stripe session expiry
+  amountCents     Int // sum of its bookings
+  stripeSessionId String?       @unique
+  stripePaymentId String? // payment_intent, needed to refund
+  createdAt       DateTime      @default(now())
+  bookings        Booking[]
+  brief           Brief?
+}
+
+// One session in the calendar. Status mirrors its order; the slot index reads it.
+model Booking {
+  id            String        @id @default(cuid())
+  orderId       String
+  order         Order         @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  consultantId  String
+  consultant    Consultant    @relation(fields: [consultantId], references: [id])
+  startsAt      DateTime // exact instant, stored in UTC
+  endsAt        DateTime
+  status        BookingStatus @default(PENDING)
+  holdExpiresAt DateTime // PENDING bookings stop blocking the slot after this
+  amountCents   Int
+  refundId      String? // set when the session is cancelled and refunded
+  cancelledBy   String? // "CLIENT" or "CONSULTANT" for a refunded cancellation
+
+  @@index([consultantId, startsAt])
+}
+
+// One-time sign-in link. Only the sha256 of the token is stored; the raw token lives in the email.
+model LoginToken {
+  id        String    @id @default(cuid())
+  email     String
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+}
+
+// Browser session behind the httpOnly cookie. The cookie holds a random id; we store its hash.
+model Session {
+  id        String   @id @default(cuid())
+  email     String
+  tokenHash String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+}
+
+// A consultant's away period. Stored as exact instants (local midnight → local midnight).
+model TimeOff {
+  id           String     @id @default(cuid())
+  consultantId String
+  consultant   Consultant @relation(fields: [consultantId], references: [id], onDelete: Cascade)
+  startsAt     DateTime
+  endsAt       DateTime
+  note         String?
+  createdAt    DateTime   @default(now())
+
+  @@index([consultantId, endsAt])
+}
+
+// A client's own details, keyed by the sign-in email. Created on first sign-in.
+model Client {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String?
+  timezone  String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// A client's PDF brief for one order, and the prep sheet made from it. One per order; uploading again replaces it.
+model Brief {
+  id         String   @id @default(cuid())
+  orderId    String   @unique
+  order      Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  filename   String // as uploaded, for display and download
+  storedPath String // file on disk, relative to the uploads folder
+  sizeBytes  Int
+  pages      Int
+  status     String // READY | NO_TEXT | UNAVAILABLE | FAILED (from the AI service)
+  source     String // CLAUDE: written by the model; SAMPLE: pre-written demo summary; NONE: no summary
+  summary    Json? // the prep sheet, when status is READY
+  model      String?
+  message    String? // why there's no summary, shown to the user
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}

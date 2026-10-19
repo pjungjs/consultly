@@ -1,0 +1,26 @@
+# Fernleaf: runway and Series A planning brief
+Prepared for: session with Kenji Watanabe (startup finance)
+Company: Fernleaf, an ordering and subscription platform for independent bakeries
+
+# Where we are
+Fernleaf lets neighbourhood bakeries sell weekly bread and pastry subscriptions online. We launched 22 months ago and raised a $1.2M seed round 11 months ago. We are a team of 7: two founders, three engineers, one customer success lead and one part-time designer.
+
+- 310 paying bakeries, mostly in the Pacific Northwest
+- $420k annual recurring revenue, growing about 6% month over month for the last two quarters
+- Monthly logo churn of 2.8%
+- Gross margin around 78% after payment processing and hosting
+- Blended customer acquisition cost of roughly $640 per bakery
+- Net burn of about $85k per month; cash in the bank $1.19M as of October 1
+
+# What we are deciding
+We want to raise a Series A in Q2 2027. Before that we have two decisions:
+1. Whether to hire two more engineers now (about $32k per month fully loaded) or wait until we pass $600k ARR.
+2. Whether to raise our main plan from $79 to $129 per month for new bakeries. Our largest customers have told us they would pay more for multi-location support, which ships in December.
+
+# What we want from the session
+- Pressure-test our runway model (spreadsheet attached separately) and tell us what investors will look at first.
+- Help us frame the price increase: how to model its effect on churn and payback.
+- Tell us which unit economics we should lead with in the Series A deck.
+
+# Constraints
+Our lead seed investor wants a board update with a hiring plan by November 20. We do not want to raise a bridge round.
