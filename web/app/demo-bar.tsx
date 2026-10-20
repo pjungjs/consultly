@@ -87,7 +87,9 @@ export default function DemoBar() {
     try {
       sessionStorage.setItem(RESET_DONE, "1");
     } catch {}
-    window.location.reload();
+    // The reset replaces your bookings and Demo consultant, so the page you were on may no longer exist:
+    // land on your side's home page instead.
+    window.location.assign(demo?.role === "consultant" ? "/dashboard" : "/my-bookings");
   }
 
   return (
