@@ -199,7 +199,12 @@ export default function ConsultantDashboard() {
               <div className="space-y-6">
                 {days.map(([label, sessions]) => (
                   <div key={label} className="grid gap-2 sm:grid-cols-[9rem_1fr]">
-                    <p className="pt-3 font-medium">{label}</p>
+                    {/* A day whose sessions were all cancelled reads as cancelled too. */}
+                    <p
+                      className={`pt-3 font-medium ${sessions.every((s) => s.status === "CANCELLED") ? "text-muted line-through" : ""}`}
+                    >
+                      {label}
+                    </p>
                     <ul className="dashboard-day-sessions divide-y divide-rule border-y border-rule">
                       {sessions.map((s) => (
                         <SessionRow key={s.id} s={s} zone={zone} onCancelled={canCancel(s) ? onCancelled : undefined} />
