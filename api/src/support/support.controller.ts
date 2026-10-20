@@ -24,7 +24,7 @@ import {
 } from 'class-validator';
 import type { Request } from 'express';
 import { AiBudgetService } from '../ai-budget/ai-budget.service.js';
-import { aiHeaders, aiUrl } from '../ai-budget/ai-service.js';
+import { aiHeaders, aiUrl, callAi } from '../ai-budget/ai-service.js';
 import { COOKIE } from '../auth/auth.controller.js';
 import { AuthService } from '../auth/auth.service.js';
 import { RateLimiter } from './rate-limiter.js';
@@ -124,11 +124,10 @@ export class SupportController {
     }
     let res: Response;
     try {
-      res = await fetch(aiUrl('/support/chat'), {
-        // A sleeping AI service takes about a minute to wake on the free plan; give it that long.
-        signal: AbortSignal.timeout(90_000),
+      // Waits out a sleeping AI service (about 40 seconds to start on the free plan).
+      res = await callAi('/support/chat', {
         method: 'POST',
-        headers: aiHeaders({ 'Content-Type': 'application/json' }),
+        headers: { 'Content-Type': 'application/json' },
         // The session lets the AI service look up this user's bookings as this user, and nothing more.
         body: JSON.stringify({
           messages: dto.messages,

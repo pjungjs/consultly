@@ -10,7 +10,7 @@ import {
 } from '@nestjs/common';
 import { Prisma } from '../generated/prisma/client.js';
 import { AiBudgetService } from '../ai-budget/ai-budget.service.js';
-import { aiHeaders, aiUrl } from '../ai-budget/ai-service.js';
+import { callAi } from '../ai-budget/ai-service.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { RateLimiter } from '../support/rate-limiter.js';
 import {
@@ -191,11 +191,7 @@ export class BriefsService {
     form.append('session_minutes', String(sessionMinutes));
     let res: Response;
     try {
-      res = await fetch(aiUrl('/briefs/summarize'), {
-        method: 'POST',
-        headers: aiHeaders(),
-        body: form,
-      });
+      res = await callAi('/briefs/summarize', { method: 'POST', body: form });
     } catch (err) {
       // The PDF is still saved, so the consultant can read the original; re-uploading retries the summary.
       this.logger.error(`AI service unreachable: ${(err as Error).message}`);
@@ -206,7 +202,18 @@ export class BriefsService {
           "The AI service isn't reachable right now, so there's no summary yet. Upload the PDF again later.",
       };
     }
-    const body = (await res.json()) as AiResult & { detail?: string };
+    // Anything but JSON (e.g. the host's error page) means the service itself failed, not the file.
+    const body = (await res.json().catch(() => null)) as
+      (AiResult & { detail?: string }) | null;
+    if (!body || res.status >= 500) {
+      this.logger.error(`AI service answered ${res.status}`);
+      return {
+        status: 'FAILED',
+        pages: 0,
+        message:
+          "The AI service couldn't read the brief right now, so there's no summary yet. Upload the PDF again in a minute.",
+      };
+    }
     // 4xx from the AI service means the file itself is the problem (not a PDF, too long, password-protected).
     if (!res.ok)
       throw new BadRequestException(

@@ -206,6 +206,27 @@ describe('BriefsService.upload', () => {
   });
 });
 
+describe('BriefsService when the AI service is down', () => {
+  it('keeps the PDF with a try-again message when the host answers with an error page', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 500,
+        json: async () => {
+          throw new SyntaxError('Unexpected token <');
+        },
+      }),
+    );
+    const { service, prisma } = setup();
+    await service.upload('o1', 'dana@example.com', pdf());
+    expect(prisma.brief.upsert.mock.calls[0][0].create).toMatchObject({
+      status: 'FAILED',
+      storedPath: 'o1-new.pdf',
+    });
+  });
+});
+
 describe('BriefsService AI guardrails', () => {
   const sent = () => vi.mocked(fetch).mock.calls[0][1]!.body as FormData;
 
