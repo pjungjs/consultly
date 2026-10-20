@@ -36,7 +36,7 @@ services:
         value: Consultly <onboarding@resend.dev>
       - key: SUPABASE_URL
         sync: false
-      - key: SUPABASE_SERVICE_ROLE_KEY
+      - key: SUPABASE_SERVICE_ROLE_KEY # legacy service_role key, or the newer secret key (sb_secret_...)
         sync: false
       - key: SUPABASE_BUCKET
         value: briefs

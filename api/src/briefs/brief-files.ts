@@ -22,6 +22,16 @@ const supabase = () => {
 
 const uploadDir = () => resolve(process.env.UPLOAD_DIR ?? 'uploads');
 
+/**
+ * Supabase's key headers. SUPABASE_SERVICE_ROLE_KEY takes either kind of key: the legacy service_role key (a JWT,
+ * sent as both apikey and a Bearer token) or the newer secret key (sb_secret_..., which isn't a JWT and goes in
+ * apikey only). Supabase is retiring the legacy keys, so switching only means changing the setting.
+ */
+export const supabaseHeaders = (key: string): Record<string, string> =>
+  key.startsWith('sb_secret_')
+    ? { apikey: key }
+    : { apikey: key, Authorization: `Bearer ${key}` };
+
 /** Stores a file under `storedPath`, replacing anything already there. */
 export async function putBriefFile(storedPath: string, data: Buffer) {
   const s = supabase();
@@ -35,8 +45,7 @@ export async function putBriefFile(storedPath: string, data: Buffer) {
     {
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${s.key}`,
-        apikey: s.key,
+        ...supabaseHeaders(s.key),
         'Content-Type': 'application/pdf',
         'x-upsert': 'true',
       },
@@ -55,7 +64,7 @@ export async function readBriefFile(storedPath: string): Promise<Buffer> {
   const res = await fetch(
     `${s.url}/storage/v1/object/${s.bucket}/${storedPath}`,
     {
-      headers: { Authorization: `Bearer ${s.key}`, apikey: s.key },
+      headers: supabaseHeaders(s.key),
     },
   );
   if (!res.ok)
@@ -71,8 +80,7 @@ export async function removeBriefFile(storedPath: string) {
   await fetch(`${s.url}/storage/v1/object/${s.bucket}`, {
     method: 'DELETE',
     headers: {
-      Authorization: `Bearer ${s.key}`,
-      apikey: s.key,
+      ...supabaseHeaders(s.key),
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({ prefixes: [storedPath] }),
