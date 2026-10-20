@@ -2,6 +2,7 @@ import { Suspense } from "react";
 import { api, type Consultant, type SlotList } from "@/lib/api";
 import DemoConsultantCard from "./demo-consultant-card";
 import PlannerList from "./planner-list";
+import LoadingNote from "../loading-note";
 
 // Live availability: streamed inside <Suspense> so the static heading renders instantly.
 async function Planner() {
@@ -23,7 +24,7 @@ export default function ConsultantsPage() {
         Find your consultant
       </h1>
       <DemoConsultantCard />
-      <Suspense fallback={<p className="text-muted">Loading open hours…</p>}>
+      <Suspense fallback={<LoadingNote label="Loading open hours…" />}>
         <Planner />
       </Suspense>
     </div>

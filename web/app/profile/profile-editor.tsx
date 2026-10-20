@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { accountLabel, apiFetch, CATEGORIES, PROFILE_UPDATED, type ConsultantProfile, type Profile } from "@/lib/api";
 import { cityFromZone } from "@/lib/zone";
+import LoadingNote from "../loading-note";
 
 type State = { kind: "loading" } | { kind: "signed-out" } | { kind: "ready"; profile: Profile };
 type Message = { kind: "ok" | "error"; text: string } | null;
@@ -34,7 +35,7 @@ export default function ProfileEditor() {
       .catch(() => setState({ kind: "signed-out" }));
   }, []);
 
-  if (state.kind === "loading") return <p className="text-muted">Loading…</p>;
+  if (state.kind === "loading") return <LoadingNote />;
   if (state.kind === "signed-out") {
     return (
       <div className="profile-signed-out max-w-xl space-y-4">

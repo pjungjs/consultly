@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { apiFetch, type AvailabilitySnapshot, type WeeklyHours } from "@/lib/api";
 import { cityFromZone, timeIn } from "@/lib/zone";
+import LoadingNote from "../loading-note";
 
 // Shown Sunday first; `iso` is the stored weekday (Luxon/ISO: Monday 1 … Sunday 7).
 const WEEKDAYS = [
@@ -84,7 +85,7 @@ export default function AvailabilityEditor({ onChanged }: { onChanged: () => voi
     apply(await call(`time-off/${id}`, { method: "DELETE" }), "Time off removed.");
   }
 
-  if (!snap) return <p className="text-muted">Loading your availability…</p>;
+  if (!snap) return <LoadingNote label="Loading your availability…" />;
 
   const update = (i: number, patch: Partial<Row>) => setRows((cur) => cur.map((r, j) => (j === i ? { ...r, ...patch } : r)));
   const dateLabel = (d: string) => new Date(`${d}T12:00:00`).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });

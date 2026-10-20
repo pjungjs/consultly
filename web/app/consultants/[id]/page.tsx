@@ -5,6 +5,7 @@ import { api, formatPrice, isNotFound, type Consultant, type SlotList } from "@/
 import { monogram } from "@/lib/monogram";
 import LocalClock from "./local-clock";
 import SlotPicker from "./slot-picker";
+import LoadingNote from "../../loading-note";
 
 async function Studio({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -56,7 +57,7 @@ export default function ConsultantPage({ params }: { params: Promise<{ id: strin
       <Link href="/consultants" className="self-start text-sm text-muted hover:text-ink">
         <span aria-hidden>←</span> All consultants
       </Link>
-      <Suspense fallback={<p className="text-muted">Loading…</p>}>
+      <Suspense fallback={<LoadingNote />}>
         <Studio params={params} />
       </Suspense>
     </div>

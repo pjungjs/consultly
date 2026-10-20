@@ -8,6 +8,7 @@ import TestimonialCarousel from "./testimonial-carousel";
 import myBookingsShot from "../public/screenshots/my-bookings.png";
 import prepSheetShot from "../public/screenshots/prep-sheet.png";
 import timePickerShot from "../public/screenshots/time-picker.png";
+import LoadingNote from "./loading-note";
 
 const STEPS = [
   { title: "Pick a time", body: "Every consultant's open hours are shown in your own time zone. Choose one session or a few." },
@@ -87,7 +88,7 @@ export default function Home() {
             See all consultants
           </Link>
         </div>
-        <Suspense fallback={<p className="text-muted">Loading consultants…</p>}>
+        <Suspense fallback={<LoadingNote label="Loading consultants…" />}>
           <Featured />
         </Suspense>
       </section>

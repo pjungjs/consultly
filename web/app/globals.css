@@ -64,3 +64,15 @@ body {
     transform: translateY(0.5rem);
   }
 }
+
+/* LoadingNote: the "server is waking up" line appears only if loading takes longer than 5 seconds. */
+.loading-note-slow {
+  opacity: 0;
+  animation: loading-note-reveal 0s linear 5s forwards;
+}
+
+@keyframes loading-note-reveal {
+  to {
+    opacity: 1;
+  }
+}

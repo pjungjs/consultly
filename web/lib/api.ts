@@ -87,8 +87,12 @@ export class ApiError extends Error {
   }
 }
 
+// Long enough for the free API server to wake from sleep (about a minute); past that it's down, and the page shows
+// its error screen instead of loading forever.
+const API_TIMEOUT_MS = 90_000;
+
 export async function api<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${API_URL}${path}`, { cache: "no-store", ...init });
+  const res = await fetch(`${API_URL}${path}`, { cache: "no-store", signal: AbortSignal.timeout(API_TIMEOUT_MS), ...init });
   if (!res.ok) throw new ApiError(res.status, `${init?.method ?? "GET"} ${path} failed: ${res.status}`);
   return res.json() as Promise<T>;
 }

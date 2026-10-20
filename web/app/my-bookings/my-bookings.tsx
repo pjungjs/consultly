@@ -7,6 +7,7 @@ import { cityFromZone, timeIn } from "@/lib/zone";
 import { dayKey, keyLabel } from "@/lib/calendar";
 import SessionCalendar from "../session-calendar";
 import DemoSignIn from "./demo-sign-in";
+import LoadingNote from "../loading-note";
 
 type State =
   | { kind: "loading" }
@@ -54,7 +55,7 @@ export default function MyBookings() {
     setState({ kind: "signed-out" });
   }
 
-  if (state.kind === "loading") return <p className="text-muted">Loading…</p>;
+  if (state.kind === "loading") return <LoadingNote />;
 
   if (state.kind === "signed-out") {
     return (

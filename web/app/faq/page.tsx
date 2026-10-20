@@ -3,6 +3,7 @@ import Link from "next/link";
 import { Suspense } from "react";
 import { api } from "@/lib/api";
 import { LinkedText } from "@/lib/site-links";
+import LoadingNote from "../loading-note";
 
 export const metadata: Metadata = { title: "FAQ · Consultly" };
 
@@ -50,7 +51,7 @@ export default function FaqPage() {
         <h1 className="font-serif text-5xl leading-tight">Frequently asked questions</h1>
         <p className="text-lg text-muted">Booking, cancelling, refunds, briefs and accounts. Can&apos;t find it? Ask the Help button in the corner.</p>
       </div>
-      <Suspense fallback={<p className="text-muted">Loading…</p>}>
+      <Suspense fallback={<LoadingNote />}>
         <Topics />
       </Suspense>
     </article>

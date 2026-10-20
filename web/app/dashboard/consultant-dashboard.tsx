@@ -13,6 +13,7 @@ import { dayKey, keyLabel } from "@/lib/calendar";
 import BriefView from "../brief-view";
 import SessionCalendar from "../session-calendar";
 import AvailabilityEditor from "./availability-editor";
+import LoadingNote from "../loading-note";
 
 type State =
   | { kind: "loading" }
@@ -51,7 +52,7 @@ export default function ConsultantDashboard() {
     setState(await fetchDashboard());
   }
 
-  if (state.kind === "loading") return <p className="text-muted">Loading…</p>;
+  if (state.kind === "loading") return <LoadingNote />;
 
   if (state.kind === "signed-out" || state.kind === "not-consultant") {
     return (
