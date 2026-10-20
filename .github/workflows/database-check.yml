@@ -1,0 +1,22 @@
+# Every 3 days: checks the live site can reach its database. It also keeps the free Supabase project active
+# (it pauses after 7 days without database activity). A failed run emails the repo owner.
+name: Database check
+
+on:
+  schedule:
+    - cron: "17 14 */3 * *" # 14:17 UTC on days 1, 4, 7, ... (never more than 3 days apart)
+  workflow_dispatch: # run it by hand from the Actions tab
+
+permissions: {}
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Ask the live API to query the database
+        # The free API server sleeps when idle and takes about a minute to wake, so allow a few retries.
+        run: >
+          curl --fail --silent --show-error --max-time 120
+          --retry 4 --retry-delay 30 --retry-all-errors
+          https://consultly-alpha.vercel.app/api/health/db
