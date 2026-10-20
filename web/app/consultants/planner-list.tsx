@@ -16,7 +16,7 @@ const PAGE_SIZE = 5;
 // Client component so every time and day bucket uses the visitor's own timezone.
 // Search and filters run here in the browser; the whole catalogue is already loaded.
 export default function PlannerList({ consultants }: { consultants: Row[] }) {
-  const maxRate = Math.max(...consultants.map((c) => c.rateCents));
+  const maxRate = Math.max(0, ...consultants.map((c) => c.rateCents)); // 0 with no consultants, not -Infinity
   const ceiling = Math.ceil(maxRate / PRICE_STEP) * PRICE_STEP;
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState<string | null>(null);
