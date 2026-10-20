@@ -168,7 +168,7 @@ describe('OrdersService.markPaid', () => {
     prisma.order.updateMany.mockResolvedValue({ count: 1 });
     prisma.order.findUnique.mockResolvedValue(paidOrder);
     await service.markPaid('o1', 'pi_1');
-    expect(prisma.order.update).toHaveBeenCalledWith({
+    expect(prisma.order.updateMany).toHaveBeenCalledWith({
       where: { id: 'o1' },
       data: { stripePaymentId: 'pi_1' },
     });
@@ -184,6 +184,16 @@ describe('OrdersService.markPaid', () => {
       status: 'CONFIRMED',
     });
     await service.markPaid('o1', 'pi_1');
+    expect(email.send).not.toHaveBeenCalled();
+  });
+
+  it('acknowledges a payment for an order it does not have (another environment, or a reset demo)', async () => {
+    const { service, prisma, email } = setup();
+    prisma.order.findUnique.mockResolvedValue(null);
+    await expect(
+      service.markPaid('o-elsewhere', 'pi_1'),
+    ).resolves.toBeUndefined();
+    expect(prisma.order.updateMany).not.toHaveBeenCalled();
     expect(email.send).not.toHaveBeenCalled();
   });
 

@@ -271,9 +271,15 @@ export class OrdersService {
 
   /** Called from the webhook. Idempotent: Stripe may deliver the same event more than once. */
   async markPaid(orderId: string, paymentId?: string) {
+    // Unknown order: one from another environment sharing this Stripe test account (e.g. a local run), or a demo
+    // order deleted by a reset. Acknowledge it, so Stripe doesn't retry for days.
+    if (!(await this.prisma.order.findUnique({ where: { id: orderId } }))) {
+      this.logger.warn(`Payment for unknown order ${orderId}: ignored`);
+      return;
+    }
     const changed = await this.setStatus(orderId, 'CONFIRMED', 'PENDING');
     if (paymentId)
-      await this.prisma.order.update({
+      await this.prisma.order.updateMany({
         where: { id: orderId },
         data: { stripePaymentId: paymentId },
       });
