@@ -1,0 +1,59 @@
+import { AuthController } from './auth.controller.js';
+
+const HOUR = 3_600_000;
+const at = (hoursFromNow: number) => new Date(Date.now() + hoursFromNow * HOUR);
+const session = (id: string, hoursFromNow: number, status: string) => ({
+  id,
+  startsAt: at(hoursFromNow),
+  endsAt: at(hoursFromNow + 1),
+  amountCents: 20000,
+  status,
+  cancelledBy: status === 'CANCELLED' ? 'CLIENT' : null,
+  order: {
+    id: 'o-' + id,
+    clientName: 'Dana',
+    clientEmail: 'dana@example.com',
+    clientTimezone: 'UTC',
+    brief: null,
+  },
+});
+
+function dashboard(sessions: ReturnType<typeof session>[]) {
+  const prisma = {
+    consultant: {
+      findUnique: vi
+        .fn()
+        .mockResolvedValue({
+          id: 'c1',
+          name: 'Jason',
+          timezone: 'UTC',
+          paused: false,
+        }),
+    },
+    booking: { findMany: vi.fn().mockResolvedValue(sessions) },
+    availability: { count: vi.fn().mockResolvedValue(5) },
+  };
+  const auth = { emailFor: vi.fn().mockResolvedValue('jason@example.com') };
+  const controller = new AuthController(
+    auth as never,
+    {} as never,
+    prisma as never,
+    {} as never,
+  );
+  return controller.consultantDashboard({ cookies: {} } as never);
+}
+
+describe('consultant dashboard', () => {
+  it('keeps cancelled sessions in Upcoming until their time, but never lists them under Past', async () => {
+    const { upcoming, past, stats } = await dashboard([
+      session('past-paid', -48, 'CONFIRMED'),
+      session('past-cancelled', -24, 'CANCELLED'),
+      session('next-paid', 24, 'CONFIRMED'),
+      session('next-cancelled', 48, 'CANCELLED'),
+    ]);
+    expect(upcoming.map((s) => s.id)).toEqual(['next-paid', 'next-cancelled']);
+    expect(past.map((s) => s.id)).toEqual(['past-paid']);
+    expect(stats.upcomingCount).toBe(1);
+    expect(stats.earnedCents).toBe(40000);
+  });
+});

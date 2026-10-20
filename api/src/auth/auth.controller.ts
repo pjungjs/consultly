@@ -235,7 +235,10 @@ export class AuthController {
     const weekStart = weekStartDt.toJSDate();
     const weekEnd = weekStartDt.plus({ days: 7 }).toJSDate();
     const upcoming = sessions.filter((b) => b.endsAt > new Date());
-    const past = sessions.filter((b) => b.endsAt <= new Date()).reverse();
+    // Past means sessions that took place: a cancelled one drops off once its time has gone by.
+    const past = sessions
+      .filter((b) => b.endsAt <= new Date() && b.status === 'CONFIRMED')
+      .reverse();
     // Money and counts only include sessions that are still booked.
     const bookings = sessions.filter((b) => b.status === 'CONFIRMED');
     const sum = (list: typeof sessions) =>

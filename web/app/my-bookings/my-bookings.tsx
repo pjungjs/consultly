@@ -95,10 +95,14 @@ export default function MyBookings() {
   const sessions = state.orders
     .flatMap((o) => o.bookings.map((b) => ({ ...b, order: o })))
     .sort((a, b) => a.startsAt.localeCompare(b.startsAt));
-  const upcoming = sessions.filter((s) => new Date(s.endsAt).getTime() > now);
+  const isOver = (s: Session) => new Date(s.endsAt).getTime() <= now;
+  // Same as the consultant's dashboard: a cancelled session stays listed until its time, then drops off.
+  // Past means sessions that took place.
+  const listed = sessions.filter((s) => !(isOver(s) && s.status === "CANCELLED"));
+  const upcoming = listed.filter((s) => !isOver(s));
   const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-  const past = sessions.filter((s) => new Date(s.endsAt).getTime() <= now).reverse(); // newest first
-  const shown = day ? sessions.filter((s) => dayKey(s.startsAt, zone) === day) : list === "upcoming" ? upcoming : past;
+  const past = listed.filter(isOver).reverse(); // newest first
+  const shown = day ? listed.filter((s) => dayKey(s.startsAt, zone) === day) : list === "upcoming" ? upcoming : past;
 
   return (
     <div className="my-bookings space-y-10">

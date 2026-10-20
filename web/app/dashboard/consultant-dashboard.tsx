@@ -268,7 +268,7 @@ function SessionRow({
             `${new Date(s.startsAt).toLocaleDateString(undefined, { month: "short", day: "numeric", timeZone: zone })} `}
           {timeIn(s.startsAt, zone)}
         </span>
-        <span>
+        <span className={cancelled ? "text-muted line-through" : ""}>
           {s.order.clientName}{" "}
           {/* Demo clients have a made-up address that can't receive email. */}
           {!isDemoEmail(s.order.clientEmail) && (
