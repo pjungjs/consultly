@@ -57,7 +57,7 @@ export default function ProfileEditor() {
           <p className="text-sm text-muted">
             {accountLabel(profile.email) === profile.email
               ? <>Signed in as {profile.email}. Your email is how you sign in, so it can&apos;t be changed here.</>
-              : <>Signed in as {accountLabel(profile.email)}. Changes stay in your private demo until you reset it.</>}
+              : <>Signed in as {accountLabel(profile.email)} ({profile.email}, a made-up demo address). Changes stay in your private demo until you reset it.</>}
           </p>
         </div>
         <Roles consultant={profile.consultant} />

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import {
+import { isDemoEmail,
   apiFetch,
   formatPrice,
   type Dashboard,
@@ -270,12 +270,12 @@ function SessionRow({
         </span>
         <span>
           {s.order.clientName}{" "}
-          <a
-            href={`mailto:${s.order.clientEmail}`}
-            className="text-sm text-muted underline"
-          >
-            {s.order.clientEmail}
-          </a>
+          {/* Demo clients have a made-up address that can't receive email. */}
+          {!isDemoEmail(s.order.clientEmail) && (
+            <a href={`mailto:${s.order.clientEmail}`} className="text-sm text-muted underline">
+              {s.order.clientEmail}
+            </a>
+          )}
         </span>
         <span className="flex items-baseline gap-3 text-sm text-muted">
           {theirs

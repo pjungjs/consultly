@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { use, useEffect, useState } from "react";
-import { takeCheckout, api, formatPrice, isNotFound, type Order } from "@/lib/api";
+import { isDemoEmail, takeCheckout, api, formatPrice, isNotFound, type Order } from "@/lib/api";
 import NotFoundMessage from "../../not-found-message";
 import BriefPanel from "../../brief-panel";
 import { cityFromZone, timeIn } from "@/lib/zone";
@@ -98,7 +98,15 @@ export default function OrderStatus({ params }: { params: Promise<{ id: string }
         <dt className="text-muted">{order.amountCents === 0 ? "Price" : "Paid"}</dt>
         <dd>{formatPrice(order.amountCents)}</dd>
         <dt className="text-muted">Confirmation sent to</dt>
-        <dd>{order.clientEmail}</dd>
+        <dd className="space-y-1">
+          <span className="block">{order.clientEmail}</span>
+          {/* Demo accounts' made-up addresses can't receive mail, so the email is skipped. Say so. */}
+          {isDemoEmail(order.clientEmail) && (
+            <span className="block w-fit rounded-sm bg-highlight px-2 py-1 text-xs font-medium text-on-highlight">
+              Demo: no email is sent. A real booking gets a confirmation email with the details and a calendar invite.
+            </span>
+          )}
+        </dd>
       </dl>
       <div className="flex flex-wrap gap-3">
         {/* Calendar sync (Google etc.) is a later feature; until then, everything lives in My bookings. */}

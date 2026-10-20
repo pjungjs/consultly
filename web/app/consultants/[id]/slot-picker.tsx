@@ -196,7 +196,7 @@ export default function SlotPicker({
             Pick your times
           </h2>
           <p className="text-sm text-muted">
-            Choose one session or several, then pay once.
+            {consultant.rateCents === 0 ? "Choose one session or several." : "Choose one session or several, then pay once."}
           </p>
         </div>
         <p className="text-sm">
