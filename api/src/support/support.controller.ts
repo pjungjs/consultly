@@ -71,7 +71,7 @@ export class SupportController {
   private lastWake = 0;
 
   /**
-   * Called when someone opens the Help panel: wakes the AI service (it sleeps when idle on the free plan) while
+   * Called when someone opens the Help panel or a booking they can add a brief to: wakes the AI service (it sleeps when idle on the free plan) while
    * they type, so their first answer doesn't wait a minute. At most one ping a minute; nobody waits for it.
    */
   @Post('wake')

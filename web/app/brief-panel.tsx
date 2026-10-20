@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { apiFetch, type Brief } from "@/lib/api";
+import { apiFetch, wakeAssistant, type Brief } from "@/lib/api";
 import { BriefBody } from "./brief-view";
 
 type State = { kind: "loading" } | { kind: "signed-out" } | { kind: "ready"; brief: Brief | null; canEdit: boolean };
@@ -17,7 +17,11 @@ export default function BriefPanel({ orderId }: { orderId: string }) {
   useEffect(() => {
     apiFetch(`/me/orders/${orderId}/brief`, { credentials: "include", cache: "no-store" })
       .then(async (res) => (res.status === 401 || res.status === 404 ? { kind: "signed-out" as const } : { kind: "ready" as const, ...(await res.json()) }))
-      .then(setState)
+      .then((next) => {
+        // They can add a brief: start the AI service now, so their upload doesn't wait for it to wake.
+        if (next.kind === "ready" && next.canEdit) wakeAssistant();
+        setState(next);
+      })
       .catch(() => setState({ kind: "signed-out" }));
   }, [orderId]);
 

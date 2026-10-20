@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { API_URL, apiFetch } from "@/lib/api";
+import { apiFetch, wakeAssistant } from "@/lib/api";
 import { LinkedText } from "@/lib/site-links";
 
 type Mode = "ai" | "demo";
@@ -54,8 +54,7 @@ export default function SupportChat() {
     // Restore the tab's conversation on first open (sessionStorage only exists in the browser, so not during render).
     if (!open && messages.length === 0) setMessages(readHistory());
     if (!open) setMode(readMode());
-    // Wake the assistant while they type: it sleeps when idle and takes about a minute to start. No toast on failure.
-    if (!open) fetch(`${API_URL}/support/wake`, { method: "POST" }).catch(() => {});
+    if (!open) wakeAssistant(); // ready by the time they've typed
     setOpen(!open);
   }
 

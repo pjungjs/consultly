@@ -157,6 +157,15 @@ export interface Profile {
   consultant: ConsultantProfile | null;
 }
 
+/**
+ * Wakes the AI service, which sleeps when idle on the free plan and takes about 40 seconds to start. Called when
+ * someone is about to need it (opening Help, or a booking they can add a brief to), so it's ready by the time they
+ * ask. Fire and forget: no toast if it fails, the real request reports any problem.
+ */
+export function wakeAssistant() {
+  fetch(`${API_URL}/support/wake`, { method: "POST" }).catch(() => {});
+}
+
 // sessionStorage: the unpaid checkout this tab went to Stripe for. Coming back to the booking page without paying
 // (the browser's Back button skips Stripe's own "back" link) releases it, so the times don't stay held.
 const PENDING_CHECKOUT = "consultly-pending-checkout";
