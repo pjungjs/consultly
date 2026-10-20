@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { sortConsultants } from "./catalogue";
+import { DEFAULT_SORT, SORTS, sortConsultants } from "./catalogue";
 
 const weekEnd = new Date("2026-10-25T00:00:00Z");
 const rows = [
@@ -29,9 +29,10 @@ describe("sortConsultants", () => {
     expect(rows.map((r) => r.name)).toEqual(["Cara", "Ava", "Ben", "Dan"]);
   });
 
-  it("keeps free sessions (the onboarding call) first in every sort", () => {
+  it("defaults to price, low to high, so the free onboarding call comes first", () => {
+    expect(DEFAULT_SORT).toBe("price-asc");
+    expect(Object.keys(SORTS)).toEqual(["price-asc", "price-desc", "soonest", "most-open", "name"]);
     const withFree = [...rows, { name: "Zed Onboarding", rateCents: 0, slots: [] }];
-    for (const sort of ["soonest", "price-desc", "most-open", "name"] as const)
-      expect(sortConsultants(withFree, sort, weekEnd)[0].name).toBe("Zed Onboarding");
+    expect(sortConsultants(withFree, DEFAULT_SORT, weekEnd)[0].name).toBe("Zed Onboarding");
   });
 });

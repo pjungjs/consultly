@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { CATEGORIES, formatPrice, type Consultant } from "@/lib/api";
 import { paginate } from "@/lib/calendar";
-import { SORTS, sortConsultants, type SortKey } from "@/lib/catalogue";
+import { DEFAULT_SORT, SORTS, sortConsultants, type SortKey } from "@/lib/catalogue";
 import { cityFromZone } from "@/lib/zone";
 
 type Row = Consultant & { slots: string[] };
@@ -23,7 +23,7 @@ export default function PlannerList({ consultants }: { consultants: Row[] }) {
   const [maxPrice, setMaxPrice] = useState(ceiling);
   const [thisWeek, setThisWeek] = useState(false);
   const [page, setPage] = useState(0);
-  const [sort, setSort] = useState<SortKey>("soonest");
+  const [sort, setSort] = useState<SortKey>(DEFAULT_SORT);
 
   // The calendar week, Sunday to Saturday; days already gone are dimmed.
   const today = new Date();
