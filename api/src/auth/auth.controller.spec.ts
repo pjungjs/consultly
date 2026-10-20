@@ -21,14 +21,12 @@ const session = (id: string, hoursFromNow: number, status: string) => ({
 function dashboard(sessions: ReturnType<typeof session>[]) {
   const prisma = {
     consultant: {
-      findUnique: vi
-        .fn()
-        .mockResolvedValue({
-          id: 'c1',
-          name: 'Jason',
-          timezone: 'UTC',
-          paused: false,
-        }),
+      findUnique: vi.fn().mockResolvedValue({
+        id: 'c1',
+        name: 'Jason',
+        timezone: 'UTC',
+        paused: false,
+      }),
     },
     booking: { findMany: vi.fn().mockResolvedValue(sessions) },
     availability: { count: vi.fn().mockResolvedValue(5) },

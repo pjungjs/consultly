@@ -1,9 +1,10 @@
 import 'dotenv/config';
 import { ValidationPipe } from '@nestjs/common';
-import { NestFactory } from '@nestjs/core';
+import { HttpAdapterHost, NestFactory } from '@nestjs/core';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import cookieParser from 'cookie-parser';
 import { AppModule } from './app.module.js';
+import { DatabaseDownFilter } from './database-down.filter.js';
 import { webUrl } from './web-url.js';
 
 async function bootstrap() {
@@ -21,6 +22,9 @@ async function bootstrap() {
   });
   app.use(cookieParser());
   app.useGlobalPipes(new ValidationPipe({ whitelist: true }));
+  app.useGlobalFilters(
+    new DatabaseDownFilter(app.get(HttpAdapterHost).httpAdapter),
+  );
   await app.listen(process.env.PORT ?? 4000);
 }
 await bootstrap();
