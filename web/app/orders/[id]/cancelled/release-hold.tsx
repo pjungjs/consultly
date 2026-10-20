@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { use, useEffect, useState } from "react";
-import { api, type Order } from "@/lib/api";
+import { api, takeCheckout, type Order } from "@/lib/api";
 
 // Stripe's "back" link lands here: free the held slots now instead of after 30 minutes.
 export default function ReleaseHold({ params }: { params: Promise<{ id: string }> }) {
@@ -10,6 +10,7 @@ export default function ReleaseHold({ params }: { params: Promise<{ id: string }
   const [order, setOrder] = useState<Order | null>(null);
 
   useEffect(() => {
+    takeCheckout(); // released here, so the booking page has nothing left to release
     api<Order>(`/orders/${id}/release`, { method: "POST" }).then(setOrder);
   }, [id]);
 

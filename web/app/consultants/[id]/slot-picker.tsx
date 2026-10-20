@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { apiFetch, CLIENT_CANCEL_HOURS, formatPrice, type Consultant, type Me } from "@/lib/api";
+import { apiFetch, CLIENT_CANCEL_HOURS, rememberCheckout, takeCheckout, formatPrice, type Consultant, type Me } from "@/lib/api";
 import { buildWeeks, dayKey, keyLabel, monthCells, shiftMonth, type Day } from "@/lib/calendar";
 import CalendarToolbar, { type CalendarView } from "../../calendar-toolbar";
 import { cityFromZone, timeIn } from "@/lib/zone";
@@ -28,6 +28,7 @@ export default function SlotPicker({
   const [selected, setSelected] = useState<string[]>([]);
   const [step, setStep] = useState<"pick" | "details">("pick");
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const router = useRouter();
   const [me, setMe] = useState<Me | null>(null);
@@ -47,7 +48,30 @@ export default function SlotPicker({
       .catch(() => {});
   }, []);
 
+  // Back from Stripe without paying: release that checkout so its times open up again. Runs on load, and on
+  // "pageshow" for when the browser restores this page from its back/forward cache with the old state.
+  useEffect(() => {
+    const release = async () => {
+      const orderId = takeCheckout();
+      if (!orderId) return;
+      await apiFetch(`/orders/${orderId}/release`, { method: "POST" });
+      setSelected([]);
+      setStep("pick");
+      setNotice("Your unpaid checkout was cancelled and the times released. Pick again.");
+      router.refresh(); // the released times reappear
+    };
+    const onShow = (e: PageTransitionEvent) => {
+      if (!e.persisted) return;
+      setSubmitting(false);
+      release();
+    };
+    release();
+    window.addEventListener("pageshow", onShow);
+    return () => window.removeEventListener("pageshow", onShow);
+  }, [router]);
+
   function toggle(iso: string) {
+    setNotice(null);
     setError(null);
     setSelected((cur) => {
       if (cur.includes(iso)) return cur.filter((s) => s !== iso);
@@ -80,6 +104,7 @@ export default function SlotPicker({
     });
     const body = await res.json();
     if (res.ok) {
+      if (consultant.rateCents > 0) rememberCheckout(body.orderId); // going to Stripe
       window.location.href = body.checkoutUrl;
       return;
     }
@@ -280,6 +305,11 @@ export default function SlotPicker({
         </div>
       ) : (
         <div className="slot-picker-checkout-bar sticky bottom-0 -mx-4 space-y-3 border-t border-rule bg-paper px-4 py-4">
+          {notice && (
+            <p role="status" className="slot-picker-notice text-sm font-medium">
+              {notice}
+            </p>
+          )}
           {error && (
             <p
               role="alert"

@@ -78,11 +78,33 @@ describe('SupportController', () => {
     );
     vi.stubGlobal(
       'fetch',
-      vi.fn().mockResolvedValue({ ok: false, json: async () => ({}) }),
+      vi
+        .fn()
+        .mockResolvedValue({ ok: false, status: 500, text: async () => '' }),
     );
-    await expect(controller().chat(req(), dto)).rejects.toBeInstanceOf(
-      ServiceUnavailableException,
+    await expect(controller().chat(req(), dto)).rejects.toThrow(
+      "couldn't answer",
     );
+  });
+
+  it('says the assistant is starting up while the host wakes it (502-504)', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi
+        .fn()
+        .mockResolvedValue({ ok: false, status: 503, text: async () => '' }),
+    );
+    await expect(controller().chat(req(), dto)).rejects.toThrow('starting up');
+  });
+
+  it('wakes the AI service when Help opens, at most once a minute', () => {
+    const fetch = vi.fn().mockResolvedValue({ ok: true });
+    vi.stubGlobal('fetch', fetch);
+    const support = controller();
+    support.wake();
+    support.wake();
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(fetch.mock.calls[0][0]).toMatch(/\/health$/);
   });
 
   it('stops a visitor after 20 messages in 10 minutes, before calling the AI service', async () => {

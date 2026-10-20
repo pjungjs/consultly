@@ -19,6 +19,7 @@ import type { CreateOrderDto } from './create-order.dto.js';
 import { orderInvite } from './ics.js';
 import { removeBrief } from '../briefs/brief-files.js';
 import { demoIdOf } from '../auth/demo.js';
+import { webUrl } from '../web-url.js';
 
 // Anti-abuse limits per email address: times held while paying, and upcoming free sessions.
 const MAX_HELD_SESSIONS = 6;
@@ -151,7 +152,7 @@ export class OrdersService {
       throw err;
     }
 
-    const web = process.env.WEB_URL ?? 'http://localhost:3000';
+    const web = webUrl();
     // Free sessions (e.g. onboarding calls) skip Stripe, which can't charge $0: confirmed straight away.
     if (consultant.rateCents === 0) {
       await this.markPaid(order.id);
@@ -249,13 +250,20 @@ export class OrdersService {
     const order = await this.get(id);
     if (order.status !== 'PENDING') return order;
     if (order.stripeSessionId) {
-      await this.payments.stripe.checkout.sessions
-        .expire(order.stripeSessionId)
-        .catch((err: Error) => {
-          this.logger.warn(
-            `Could not expire session ${order.stripeSessionId}: ${err.message}`,
-          );
-        });
+      // Only an open checkout is released. One that was just paid (its webhook may still be on the way) is left
+      // for the webhook to confirm, so leaving the success page with Back can never cancel a paid order.
+      const checkout = await this.payments.stripe.checkout.sessions.retrieve(
+        order.stripeSessionId,
+      );
+      if (checkout.status === 'complete') return order;
+      if (checkout.status === 'open')
+        await this.payments.stripe.checkout.sessions
+          .expire(order.stripeSessionId)
+          .catch((err: Error) => {
+            this.logger.warn(
+              `Could not expire session ${order.stripeSessionId}: ${err.message}`,
+            );
+          });
     }
     await this.setStatus(id, 'CANCELLED', 'PENDING');
     return this.get(id);
@@ -442,7 +450,7 @@ export class OrdersService {
         .setZone(order.clientTimezone)
         .toLocaleString(DateTime.DATETIME_MED_WITH_WEEKDAY);
     const lines = order.bookings.map((b) => when(b.startsAt));
-    const receipt = `${process.env.WEB_URL ?? 'http://localhost:3000'}/orders/${order.id}`;
+    const receipt = `${webUrl()}/orders/${order.id}`;
     const total =
       order.amountCents === 0
         ? 'Free'

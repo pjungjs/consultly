@@ -11,6 +11,7 @@ import { EmailService } from '../email/email.service.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { sessionEmail } from './session.js';
 import { hashToken, newToken } from './tokens.js';
+import { webUrl } from '../web-url.js';
 
 const LINK_MINUTES = 15;
 // At most this many sign-in links per address per LINK_MINUTES: stops inbox flooding and burning the email quota.
@@ -57,7 +58,7 @@ export class AuthService {
         expiresAt: new Date(Date.now() + LINK_MINUTES * 60_000),
       },
     });
-    const link = `${process.env.WEB_URL ?? 'http://localhost:3000'}/my-bookings/verify?token=${token}`;
+    const link = `${webUrl()}/my-bookings/verify?token=${token}`;
     try {
       await this.email.send(
         email,

@@ -68,6 +68,22 @@ export class SupportController {
     private readonly auth: AuthService,
   ) {}
 
+  private lastWake = 0;
+
+  /**
+   * Called when someone opens the Help panel: wakes the AI service (it sleeps when idle on the free plan) while
+   * they type, so their first answer doesn't wait a minute. At most one ping a minute; nobody waits for it.
+   */
+  @Post('wake')
+  @HttpCode(204)
+  wake() {
+    if (Date.now() - this.lastWake < 60_000) return;
+    this.lastWake = Date.now();
+    fetch(aiUrl('/health'), { signal: AbortSignal.timeout(90_000) }).catch(
+      () => {},
+    );
+  }
+
   /** The FAQ page: the same help topics the assistant answers from, so the two can never disagree. */
   @Get('topics')
   async topics() {
@@ -109,6 +125,8 @@ export class SupportController {
     let res: Response;
     try {
       res = await fetch(aiUrl('/support/chat'), {
+        // A sleeping AI service takes about a minute to wake on the free plan; give it that long.
+        signal: AbortSignal.timeout(90_000),
         method: 'POST',
         headers: aiHeaders({ 'Content-Type': 'application/json' }),
         // The session lets the AI service look up this user's bookings as this user, and nothing more.
@@ -125,10 +143,17 @@ export class SupportController {
         "The assistant isn't available right now. Try again later, or use the Contact page.",
       );
     }
-    if (!res.ok)
-      throw new ServiceUnavailableException(
-        "The assistant couldn't answer that. Try again, or use the Contact page.",
+    if (!res.ok) {
+      this.logger.error(
+        `AI service answered ${res.status}: ${(await res.text()).slice(0, 200)}`,
       );
+      // 502-504 come from the host while the service starts up or restarts.
+      throw new ServiceUnavailableException(
+        res.status >= 502
+          ? 'The assistant is starting up. Try again in a minute.'
+          : "The assistant couldn't answer that. Try again, or use the Contact page.",
+      );
+    }
     const body = (await res.json()) as {
       reply: string;
       mode: 'ai' | 'demo';

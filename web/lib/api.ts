@@ -157,6 +157,27 @@ export interface Profile {
   consultant: ConsultantProfile | null;
 }
 
+// sessionStorage: the unpaid checkout this tab went to Stripe for. Coming back to the booking page without paying
+// (the browser's Back button skips Stripe's own "back" link) releases it, so the times don't stay held.
+const PENDING_CHECKOUT = "consultly-pending-checkout";
+
+export function rememberCheckout(orderId: string) {
+  try {
+    sessionStorage.setItem(PENDING_CHECKOUT, orderId);
+  } catch {} // storage blocked: the hold just expires on its own after 30 minutes
+}
+
+/** Returns the remembered checkout (if any) and forgets it. */
+export function takeCheckout(): string | null {
+  try {
+    const id = sessionStorage.getItem(PENDING_CHECKOUT);
+    sessionStorage.removeItem(PENDING_CHECKOUT);
+    return id;
+  } catch {
+    return null;
+  }
+}
+
 /** How to name the signed-in account: demo accounts have made-up addresses, so they're named by their side. */
 export const accountLabel = (email: string) =>
   /^demo-[a-f0-9]{12}@consultly\.test$/i.test(email)

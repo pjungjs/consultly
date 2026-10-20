@@ -17,6 +17,11 @@ export class EmailService {
     html: string,
     attachments?: { filename: string; content: string }[],
   ) {
+    // Demo accounts use made-up addresses that can't receive mail: skip them rather than log a failure.
+    if (to.toLowerCase().endsWith('@consultly.test')) {
+      this.logger.log(`Skipped "${subject}" to demo address ${to}`);
+      return;
+    }
     const key = process.env.RESEND_API_KEY;
     if (!key) {
       this.logger.warn(

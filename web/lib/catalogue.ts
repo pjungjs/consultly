@@ -12,7 +12,10 @@ export type SortKey = keyof typeof SORTS;
 
 type Sortable = { name: string; rateCents: number; slots: string[] };
 
-/** Returns a sorted copy. Ties fall back to name so the order never jumps around between renders. */
+/**
+ * Returns a sorted copy. Free sessions (the onboarding call) always come first, whatever the sort, so every
+ * newcomer sees them. Ties fall back to name so the order never jumps around between renders.
+ */
 export function sortConsultants<T extends Sortable>(rows: T[], sort: SortKey, weekEnd: Date): T[] {
   const next = (c: T) => (c.slots[0] ? new Date(c.slots[0]).getTime() : Infinity); // fully booked sorts last
   const openThisWeek = (c: T) => c.slots.filter((iso) => new Date(iso) < weekEnd).length;
@@ -23,5 +26,6 @@ export function sortConsultants<T extends Sortable>(rows: T[], sort: SortKey, we
     "most-open": (a, b) => openThisWeek(b) - openThisWeek(a),
     name: () => 0,
   };
-  return [...rows].sort((a, b) => by[sort](a, b) || a.name.localeCompare(b.name));
+  const pinned = (c: T) => (c.rateCents === 0 ? 0 : 1);
+  return [...rows].sort((a, b) => pinned(a) - pinned(b) || by[sort](a, b) || a.name.localeCompare(b.name));
 }

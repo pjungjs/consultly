@@ -28,4 +28,10 @@ describe("sortConsultants", () => {
     expect(order("name")).toEqual(["Ava", "Ben", "Cara", "Dan"]);
     expect(rows.map((r) => r.name)).toEqual(["Cara", "Ava", "Ben", "Dan"]);
   });
+
+  it("keeps free sessions (the onboarding call) first in every sort", () => {
+    const withFree = [...rows, { name: "Zed Onboarding", rateCents: 0, slots: [] }];
+    for (const sort of ["soonest", "price-desc", "most-open", "name"] as const)
+      expect(sortConsultants(withFree, sort, weekEnd)[0].name).toBe("Zed Onboarding");
+  });
 });

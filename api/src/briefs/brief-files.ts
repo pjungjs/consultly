@@ -13,7 +13,7 @@ const supabase = () => {
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
   return url && key
     ? {
-        url: url.replace(/\/$/, ''),
+        url: new URL(url).origin, // just the project address, even if a path like /rest/v1 was pasted
         key,
         bucket: process.env.SUPABASE_BUCKET ?? 'briefs',
       }
@@ -43,7 +43,10 @@ export async function putBriefFile(storedPath: string, data: Buffer) {
       body: new Uint8Array(data),
     },
   );
-  if (!res.ok) throw new Error(`Storage upload failed (${res.status})`);
+  if (!res.ok)
+    throw new Error(
+      `Storage upload failed (${res.status}): ${(await res.text()).slice(0, 200)}`,
+    );
 }
 
 export async function readBriefFile(storedPath: string): Promise<Buffer> {
@@ -55,7 +58,10 @@ export async function readBriefFile(storedPath: string): Promise<Buffer> {
       headers: { Authorization: `Bearer ${s.key}`, apikey: s.key },
     },
   );
-  if (!res.ok) throw new Error(`Storage download failed (${res.status})`);
+  if (!res.ok)
+    throw new Error(
+      `Storage download failed (${res.status}): ${(await res.text()).slice(0, 200)}`,
+    );
   return Buffer.from(await res.arrayBuffer());
 }
 

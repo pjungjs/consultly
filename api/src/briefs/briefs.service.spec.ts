@@ -159,7 +159,7 @@ describe('BriefsService.upload', () => {
     expect(files.saveBriefFile).toHaveBeenCalled();
   });
 
-  it('rejects files that are not PDFs, and PDFs the AI service cannot read, without saving anything', async () => {
+  it('rejects files that are not PDFs before saving, and deletes a saved PDF the AI service cannot read', async () => {
     const { service } = setup();
     await expect(
       service.upload(
@@ -177,7 +177,21 @@ describe('BriefsService.upload', () => {
     await expect(
       service.upload('o1', 'dana@example.com', pdf()),
     ).rejects.toThrow('45 pages');
-    expect(files.saveBriefFile).not.toHaveBeenCalled();
+    expect(files.saveBriefFile).toHaveBeenCalledTimes(1); // only the readable-looking PDF got this far
+    expect(files.removeBriefFile).toHaveBeenCalledWith('o1-new.pdf');
+  });
+
+  it('saves the PDF before asking Claude, so a storage failure costs nothing and says what happened', async () => {
+    const { service, prisma } = setup();
+    vi.stubGlobal('fetch', vi.fn());
+    vi.mocked(files.saveBriefFile).mockRejectedValueOnce(
+      new Error('Storage upload failed (404): Bucket not found'),
+    );
+    await expect(
+      service.upload('o1', 'dana@example.com', pdf()),
+    ).rejects.toThrow("couldn't be saved");
+    expect(fetch).not.toHaveBeenCalled();
+    expect(prisma.brief.upsert).not.toHaveBeenCalled();
   });
 
   it('replaces an existing brief and only then deletes the old file', async () => {

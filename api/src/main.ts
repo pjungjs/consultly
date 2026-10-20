@@ -4,6 +4,7 @@ import { NestFactory } from '@nestjs/core';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import cookieParser from 'cookie-parser';
 import { AppModule } from './app.module.js';
+import { webUrl } from './web-url.js';
 
 async function bootstrap() {
   // rawBody: the Stripe webhook signature is checked against the unparsed request bytes.
@@ -15,7 +16,7 @@ async function bootstrap() {
   if (process.env.NODE_ENV === 'production') app.set('trust proxy', true);
   // credentials: true lets the browser send the session cookie from the web app's origin.
   app.enableCors({
-    origin: process.env.WEB_URL ?? 'http://localhost:3000',
+    origin: webUrl(),
     credentials: true,
   });
   app.use(cookieParser());

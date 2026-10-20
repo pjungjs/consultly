@@ -571,3 +571,43 @@ describe('cancelling a free session', () => {
     expect(email.send.mock.calls[0][2]).toContain('nothing to refund');
   });
 });
+
+describe('releasing a held checkout', () => {
+  const pending = {
+    id: 'o1',
+    status: 'PENDING',
+    stripeSessionId: 'cs_1',
+    consultant: consultant,
+    bookings: [],
+  };
+
+  it('closes an open Stripe checkout and frees the times', async () => {
+    const { service, prisma, stripe } = setup();
+    prisma.order.findUnique.mockResolvedValue(pending);
+    prisma.order.updateMany.mockResolvedValue({ count: 1 });
+    stripe.checkout.sessions.retrieve.mockResolvedValue({ status: 'open' });
+    (stripe.checkout.sessions as Record<string, unknown>).expire = vi
+      .fn()
+      .mockResolvedValue({});
+    await service.release('o1');
+    expect(
+      (
+        stripe.checkout.sessions as unknown as {
+          expire: ReturnType<typeof vi.fn>;
+        }
+      ).expire,
+    ).toHaveBeenCalledWith('cs_1');
+    expect(prisma.order.updateMany).toHaveBeenCalledWith({
+      where: { id: 'o1', status: 'PENDING' },
+      data: { status: 'CANCELLED' },
+    });
+  });
+
+  it('never cancels a checkout that was just paid (its webhook may still be on the way)', async () => {
+    const { service, prisma, stripe } = setup();
+    prisma.order.findUnique.mockResolvedValue(pending);
+    stripe.checkout.sessions.retrieve.mockResolvedValue({ status: 'complete' });
+    await service.release('o1');
+    expect(prisma.order.updateMany).not.toHaveBeenCalled();
+  });
+});

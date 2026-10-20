@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { use, useEffect, useState } from "react";
-import { api, formatPrice, isNotFound, type Order } from "@/lib/api";
+import { takeCheckout, api, formatPrice, isNotFound, type Order } from "@/lib/api";
 import NotFoundMessage from "../../not-found-message";
 import BriefPanel from "../../brief-panel";
 import { cityFromZone, timeIn } from "@/lib/zone";
@@ -19,6 +19,7 @@ export default function OrderStatus({ params }: { params: Promise<{ id: string }
   const [missing, setMissing] = useState(false);
 
   useEffect(() => {
+    takeCheckout(); // reached Stripe's return page: this checkout is no longer one to release on Back
     let polls = 0;
     let timer: ReturnType<typeof setTimeout>;
     const load = async () => {

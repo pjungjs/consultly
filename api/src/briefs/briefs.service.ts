@@ -6,6 +6,7 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import { Prisma } from '../generated/prisma/client.js';
 import { AiBudgetService } from '../ai-budget/ai-budget.service.js';
@@ -119,13 +120,28 @@ export class BriefsService {
         HttpStatus.TOO_MANY_REQUESTS,
       );
 
+    // Saved first: if storage fails, nothing has been spent on Claude yet.
+    let storedPath: string;
+    try {
+      storedPath = await saveBriefFile(orderId, file.buffer);
+    } catch (err) {
+      this.logger.error((err as Error).message);
+      throw new ServiceUnavailableException(
+        "Your PDF couldn't be saved right now. Please try again in a few minutes.",
+      );
+    }
     // Past the daily cap the PDF is still read and saved; it just isn't summarised.
-    const result = await this.summarise(
-      file,
-      await this.budget.take('brief'),
-      order.consultant.slotMinutes,
-    );
-    const storedPath = await saveBriefFile(orderId, file.buffer);
+    let result: AiResult;
+    try {
+      result = await this.summarise(
+        file,
+        await this.budget.take('brief'),
+        order.consultant.slotMinutes,
+      );
+    } catch (err) {
+      await removeBriefFile(storedPath); // the PDF itself was rejected (unreadable, too long): don't keep it
+      throw err;
+    }
     const previous = await this.prisma.brief.findUnique({ where: { orderId } });
     const data = {
       filename: file.originalname.slice(0, 200),
