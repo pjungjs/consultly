@@ -112,6 +112,22 @@ describe('ProfileController', () => {
     expect(prisma.consultant.create).not.toHaveBeenCalled();
   });
 
+  it('uses the time zone the form showed when the account has none saved, and saves it', async () => {
+    const { controller, prisma, auth } = setup();
+    auth.ensureClient.mockResolvedValue({ name: 'Mina Park', timezone: null });
+    await controller.becomeConsultant(req, {
+      ...form,
+      timezone: 'America/New_York',
+    });
+    expect(prisma.client.update).toHaveBeenCalledWith({
+      where: { email: 'mina@example.com' },
+      data: { timezone: 'America/New_York' },
+    });
+    expect(prisma.consultant.create.mock.calls[0][0].data).toMatchObject({
+      timezone: 'America/New_York',
+    });
+  });
+
   it('refuses a second consultant profile for the same email', async () => {
     const { controller, prisma } = setup();
     prisma.consultant.findUnique.mockResolvedValue(row());

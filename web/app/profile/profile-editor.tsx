@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { accountLabel, apiFetch, CATEGORIES, PROFILE_UPDATED, type ConsultantProfile, type Profile } from "@/lib/api";
 import { cityFromZone } from "@/lib/zone";
 import LoadingNote from "../loading-note";
@@ -75,7 +75,7 @@ export default function ProfileEditor() {
       {profile.consultant ? (
         <ConsultantDetails key={profile.consultant.id} consultant={profile.consultant} onChange={setConsultant} />
       ) : (
-        <BecomeConsultant name={profile.name} onCreated={setConsultant} />
+        <BecomeConsultant name={profile.name} timezone={profile.timezone} onCreated={setConsultant} />
       )}
     </div>
   );
@@ -280,11 +280,24 @@ function ConsultantDetails({ consultant, onChange }: { consultant: ConsultantPro
 }
 
 /** Self-serve sign-up as a consultant. (A real launch would add an admin review step before going live.) */
-function BecomeConsultant({ name, onCreated }: { name: string | null; onCreated: (c: ConsultantProfile) => void }) {
+function BecomeConsultant({
+  name,
+  timezone,
+  onCreated,
+}: {
+  name: string | null;
+  timezone: string | null;
+  onCreated: (c: ConsultantProfile) => void;
+}) {
   const [open, setOpen] = useState(false);
   const [message, setMessage] = useState<Message>(null);
+  const named = !!name?.trim();
 
-  async function submit(form: FormData) {
+  // A plain submit handler, not a form action: React clears a form after its action runs, which would erase
+  // everything typed when the server says no.
+  async function submit(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const form = new FormData(e.currentTarget);
     setMessage(null);
     try {
       const res = await apiFetch(`/me/consultant`, {
@@ -297,6 +310,8 @@ function BecomeConsultant({ name, onCreated }: { name: string | null; onCreated:
           category: form.get("category"),
           rateCents: Math.round(Number(form.get("rate")) * 100),
           slotMinutes: Number(form.get("slotMinutes")),
+          // The zone shown above, in case it was never saved.
+          timezone: timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone,
         }),
       });
       const json = await res.json();
@@ -315,9 +330,10 @@ function BecomeConsultant({ name, onCreated }: { name: string | null; onCreated:
         <p className="text-muted">
           Offer your own sessions with this same email. You&apos;ll get a public profile and a dashboard; clients can book you once you&apos;ve set weekly hours.
         </p>
-        <button onClick={() => setOpen(true)} className="rounded-sm bg-ink px-5 py-2.5 text-sm font-medium text-paper">
+        <button onClick={() => setOpen(true)} disabled={!named} className="rounded-sm bg-ink px-5 py-2.5 text-sm font-medium text-paper disabled:opacity-40">
           Become a consultant
         </button>
+        {!named && <p className="text-sm text-muted">Save your name above first: clients see it on your consultant profile.</p>}
       </section>
     );
   }
@@ -328,7 +344,7 @@ function BecomeConsultant({ name, onCreated }: { name: string | null; onCreated:
       <p className="text-sm text-muted">
         This is what clients see, under your name{name ? ` (${name})` : ""} and time zone from above. You can change all of it later.
       </p>
-      <form action={submit} className="profile-become-consultant-form grid gap-4 sm:grid-cols-2">
+      <form onSubmit={submit} className="profile-become-consultant-form grid gap-4 sm:grid-cols-2">
         <label className="flex flex-col gap-1 text-sm">
           Category
           <select name="category" className={field}>

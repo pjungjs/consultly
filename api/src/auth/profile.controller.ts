@@ -14,6 +14,7 @@ import {
   IsIn,
   IsInt,
   IsNotEmpty,
+  IsOptional,
   IsString,
   IsTimeZone,
   Max,
@@ -63,6 +64,13 @@ export class ConsultantProfileDto {
   /** Length of one session: 30 or 60 minutes. */
   @IsIn([30, 60])
   slotMinutes: number;
+}
+
+/** A new consultant profile. The time zone the form showed is used if the account has none saved yet. */
+export class NewConsultantDto extends ConsultantProfileDto {
+  @IsOptional()
+  @IsTimeZone()
+  timezone?: string;
 }
 
 export class ConsultantStatusDto {
@@ -171,24 +179,26 @@ export class ProfileController {
    * through admin review.)
    */
   @Post('consultant')
-  async becomeConsultant(
-    @Req() req: Request,
-    @Body() dto: ConsultantProfileDto,
-  ) {
+  async becomeConsultant(@Req() req: Request, @Body() dto: NewConsultantDto) {
     const email = await this.auth.emailFor(req.cookies?.[COOKIE]);
     notForDemo(email);
     if (await this.prisma.consultant.findUnique({ where: { email } }))
       throw new ConflictException('You already have a consultant profile');
     const client = await this.auth.ensureClient(email);
-    if (!client.name?.trim() || !client.timezone)
+    if (!client.name?.trim())
+      throw new BadRequestException('Save your name in your profile first.');
+    const timezone = client.timezone ?? dto.timezone;
+    if (!timezone)
       throw new BadRequestException(
-        'Save your name and time zone in your profile first.',
+        'Save your time zone in your profile first.',
       );
+    if (!client.timezone)
+      await this.prisma.client.update({ where: { email }, data: { timezone } });
     const created = await this.prisma.consultant.create({
       data: {
         email,
         name: client.name,
-        timezone: client.timezone,
+        timezone,
         headline: dto.headline.trim(),
         bio: dto.bio.trim(),
         category: dto.category,
