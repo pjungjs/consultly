@@ -20,7 +20,10 @@ export default function PlannerList({ consultants }: { consultants: Row[] }) {
   const ceiling = Math.ceil(maxRate / PRICE_STEP) * PRICE_STEP;
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState<string | null>(null);
-  const [maxPrice, setMaxPrice] = useState(ceiling);
+  // null = no price limit. Storing the ceiling instead would go stale: Next keeps this state when you leave the page
+  // and come back, so a consultant priced above the old ceiling would stay filtered out.
+  const [priceLimit, setPriceLimit] = useState<number | null>(null);
+  const maxPrice = priceLimit ?? ceiling;
   const [thisWeek, setThisWeek] = useState(false);
   const [page, setPage] = useState(0);
   const [sort, setSort] = useState<SortKey>(DEFAULT_SORT);
@@ -91,7 +94,7 @@ export default function PlannerList({ consultants }: { consultants: Row[] }) {
               max={ceiling}
               step={PRICE_STEP}
               value={maxPrice}
-              onChange={(e) => refilter(setMaxPrice)(Number(e.target.value))}
+              onChange={(e) => refilter(setPriceLimit)(Number(e.target.value) >= ceiling ? null : Number(e.target.value))}
               className="w-40 accent-[var(--ink)]"
             />
           </label>
@@ -114,7 +117,7 @@ export default function PlannerList({ consultants }: { consultants: Row[] }) {
               onClick={() => {
                 setQuery("");
                 setCategory(null);
-                setMaxPrice(ceiling);
+                setPriceLimit(null);
                 setThisWeek(false);
                 setPage(0);
               }}
