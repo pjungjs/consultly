@@ -467,11 +467,13 @@ describe('OrdersService.create guardrails', () => {
     expect(stripe.checkout.sessions.create).not.toHaveBeenCalled();
   });
 
-  it('names demo bookings "Demo", whatever name the demo account has', async () => {
+  it('names demo bookings after the demo client, whatever name the demo account has', async () => {
     const { service, prisma } = setup();
     prisma.client.findUnique.mockResolvedValue({ name: 'Something rude' });
     await service.create(dto() as never, 'demo-0123456789ab@consultly.test');
-    expect(prisma.order.create.mock.calls[0][0].data.clientName).toBe('Demo');
+    expect(prisma.order.create.mock.calls[0][0].data.clientName).toBe(
+      'Peter Parkinson',
+    );
   });
 });
 

@@ -27,7 +27,10 @@ export const demoIdOf = (email: string | null | undefined) =>
 export const demoRoleOf = (email: string): DemoRole =>
   email.toLowerCase().startsWith('demo-') ? 'client' : 'consultant';
 
-/** The demo consultant's defaults: each visitor's copy starts (and resets) to these. Also seeds the public Jason. */
+/** The demo client's name, on their profile and on every booking they make. */
+export const DEMO_CLIENT_NAME = 'Peter Parkinson';
+
+/** The demo consultant's defaults: each visitor's copy starts (and resets) to these. Only demos have a Jason. */
 export const DEMO_CONSULTANT = {
   name: 'Jason Jefferson',
   headline: 'Staff software engineer',

@@ -1,6 +1,5 @@
 import { Suspense } from "react";
 import { api, type Consultant, type SlotList } from "@/lib/api";
-import DemoConsultantCard from "./demo-consultant-card";
 import PlannerList from "./planner-list";
 import LoadingNote from "../loading-note";
 
@@ -23,7 +22,6 @@ export default function ConsultantsPage() {
       <h1 className="max-w-xl font-display text-4xl font-semibold leading-tight tracking-tight sm:text-5xl">
         Find your consultant
       </h1>
-      <DemoConsultantCard />
       <Suspense fallback={<LoadingNote label="Loading open hours…" />}>
         <Planner />
       </Suspense>

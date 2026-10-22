@@ -18,7 +18,7 @@ import { StripeService } from '../stripe/stripe.service.js';
 import type { CreateOrderDto } from './create-order.dto.js';
 import { orderInvite } from './ics.js';
 import { removeBrief } from '../briefs/brief-files.js';
-import { demoIdOf } from '../auth/demo.js';
+import { DEMO_CLIENT_NAME, demoIdOf } from '../auth/demo.js';
 import { webUrl } from '../web-url.js';
 
 // Anti-abuse limits per email address: times held while paying, and upcoming free sessions.
@@ -75,9 +75,10 @@ export class OrdersService {
           })
         )?.name
       : null;
-    // Demo bookings are always named "Demo", so visitors can't put their own text on real consultants' dashboards.
+    // Demo bookings always carry the demo client's name, so visitors can't put their own text on real consultants'
+    // dashboards.
     const clientName = demoIdOf(clientEmail)
-      ? 'Demo'
+      ? DEMO_CLIENT_NAME
       : profileName?.trim() ||
         dto.clientName?.trim() ||
         clientEmail.split('@')[0];

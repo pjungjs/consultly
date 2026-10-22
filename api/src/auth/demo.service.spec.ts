@@ -68,13 +68,13 @@ describe('DemoService.start', () => {
     });
     // Each side gets its own editable name.
     expect(prisma.client.upsert.mock.calls.map((c) => c[0].create)).toEqual([
-      { email: client, name: 'Demo', timezone: 'Asia/Seoul' },
+      { email: client, name: 'Peter Parkinson', timezone: 'Asia/Seoul' },
       { email: consultant, name: DEMO_CONSULTANT.name, timezone: 'Asia/Seoul' },
     ]);
     expect(prisma.order.create).toHaveBeenCalledTimes(4);
     expect(prisma.order.create.mock.calls[0][0].data).toMatchObject({
       clientEmail: client,
-      clientName: 'Demo',
+      clientName: 'Peter Parkinson',
     });
     expect(role).toBe('consultant');
     expect(auth.startSession).toHaveBeenCalledWith(consultant);

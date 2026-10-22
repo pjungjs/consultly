@@ -1,6 +1,4 @@
 // The seeded consultants.
-import { DEMO_CONSULTANT } from '../src/auth/demo.js';
-
 export const weekdays = (startTime: string, endTime: string) =>
   [1, 2, 3, 4, 5].map((weekday) => ({ weekday, startTime, endTime }));
 
@@ -14,12 +12,6 @@ export const consultants = [
     rateCents: 15000,
     timezone: 'America/New_York',
     availability: weekdays('09:00', '17:00'),
-  },
-  {
-    // The demo's consultant: each "Try the demo" visitor gets a private copy of this profile.
-    ...DEMO_CONSULTANT,
-    // Set DEMO_CONSULTANT_EMAIL to your own address to sign in as the public Jason.
-    email: process.env.DEMO_CONSULTANT_EMAIL ?? 'jason@consultly.test',
   },
   {
     name: 'Sora Kim',

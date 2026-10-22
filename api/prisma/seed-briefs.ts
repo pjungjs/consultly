@@ -14,8 +14,7 @@ const prisma = new PrismaClient({
 });
 const SAMPLES = join(import.meta.dirname, 'samples');
 // The demo account (your own address, from .env) books as a client too.
-const demoClient =
-  process.env.DEMO_CLIENT_EMAIL ?? process.env.DEMO_CONSULTANT_EMAIL;
+const demoClient = process.env.DEMO_CLIENT_EMAIL;
 
 const samples = [
   // Seen from the client side: the demo account's booking with Kenji, in My bookings.
@@ -26,20 +25,12 @@ const samples = [
       ? { clientEmail: { equals: demoClient, mode: 'insensitive' as const } }
       : null,
   },
-  // Seen from the consultant side: EcoWay Pursuit's booking with Jason, on Jason's dashboard.
-  {
-    file: 'ecoway-architecture-brief',
-    consultant: 'Jason Jefferson',
-    where: { clientName: 'EcoWay Pursuit' },
-  },
 ];
 
 async function main() {
   for (const sample of samples) {
     if (!sample.where) {
-      console.log(
-        `skip ${sample.file}: set DEMO_CLIENT_EMAIL (or DEMO_CONSULTANT_EMAIL) in .env`,
-      );
+      console.log(`skip ${sample.file}: set DEMO_CLIENT_EMAIL in .env`);
       continue;
     }
     // Prefer a booking that still has a session ahead, so the brief can be replaced from the UI too.

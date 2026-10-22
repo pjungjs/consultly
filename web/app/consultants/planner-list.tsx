@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
-import { CATEGORIES, formatPrice, type Consultant } from "@/lib/api";
+import { useEffect, useState } from "react";
+import { apiFetch, CATEGORIES, formatPrice, type Consultant, type Me, type SlotList } from "@/lib/api";
 import { paginate } from "@/lib/calendar";
 import { DEFAULT_SORT, SORTS, sortConsultants, type SortKey } from "@/lib/catalogue";
 import { cityFromZone } from "@/lib/zone";
@@ -15,7 +15,22 @@ const PAGE_SIZE = 5;
 
 // Client component so every time and day bucket uses the visitor's own timezone.
 // Search and filters run here in the browser; the whole catalogue is already loaded.
-export default function PlannerList({ consultants }: { consultants: Row[] }) {
+export default function PlannerList({ consultants: listed }: { consultants: Row[] }) {
+  // A demo visitor's own Jason isn't in the public catalogue (nobody else can see him), so he's added here.
+  const [demoRow, setDemoRow] = useState<Row | null>(null);
+  useEffect(() => {
+    apiFetch("/me", { credentials: "include", cache: "no-store" })
+      .then((res) => (res.ok ? (res.json() as Promise<Me>) : null))
+      .then(async (me) => {
+        const id = me?.demo?.consultantId;
+        if (!id) return;
+        const [consultant, slots] = await Promise.all([apiFetch(`/consultants/${id}`), apiFetch(`/consultants/${id}/slots`)]);
+        if (consultant.ok && slots.ok)
+          setDemoRow({ ...((await consultant.json()) as Consultant), slots: ((await slots.json()) as SlotList).slots });
+      })
+      .catch(() => setDemoRow(null));
+  }, []);
+  const consultants = demoRow ? [demoRow, ...listed] : listed;
   const maxRate = Math.max(0, ...consultants.map((c) => c.rateCents)); // 0 with no consultants, not -Infinity
   const ceiling = Math.ceil(maxRate / PRICE_STEP) * PRICE_STEP;
   const [query, setQuery] = useState("");
@@ -157,6 +172,11 @@ export default function PlannerList({ consultants }: { consultants: Row[] }) {
                       <p className="font-display text-xl font-semibold">
                         {c.name} <span className="font-sans text-sm font-normal text-muted">in {cityFromZone(c.timezone)}</span>
                       </p>
+                      {c.demo && (
+                        <p className="mt-1 w-fit rounded-sm bg-highlight px-2 py-0.5 text-xs font-medium text-on-highlight">
+                          Your demo consultant: only you can see and book him
+                        </p>
+                      )}
                       <p className="text-sm text-muted">
                         {c.headline} · {c.category}
                       </p>

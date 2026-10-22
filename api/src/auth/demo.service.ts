@@ -8,6 +8,7 @@ import { removeBrief } from '../briefs/brief-files.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { AuthService } from './auth.service.js';
 import {
+  DEMO_CLIENT_NAME,
   DEMO_CONSULTANT,
   type DemoRole,
   demoAccounts,
@@ -86,10 +87,10 @@ export class DemoService {
       timezone && IANAZone.isValidZone(timezone)
         ? timezone
         : DEMO_CONSULTANT.timezone;
-    // Both sides have their own editable name: "Demo" for the client, the consultant's name for Jason.
+    // Both sides have their own editable name: Peter for the client, Jason for the consultant.
     // upsert: two tabs signing in at once must not both insert.
     for (const [email, name] of [
-      [client, 'Demo'],
+      [client, DEMO_CLIENT_NAME],
       [consultant, DEMO_CONSULTANT.name],
     ])
       await this.prisma.client.upsert({
@@ -117,7 +118,7 @@ export class DemoService {
       await this.prisma.order.create({
         data: {
           consultantId: copy.id,
-          clientName: 'Demo',
+          clientName: DEMO_CLIENT_NAME,
           clientEmail: client,
           clientTimezone: zone,
           status: 'CONFIRMED',
