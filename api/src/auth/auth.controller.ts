@@ -75,8 +75,9 @@ class VerifyDto {
 export class AuthController {
   // 10 sign-in emails per hour per visitor.
   private readonly linkRequests = new RateLimiter(10, 60 * 60_000);
-  // 10 demo sign-ins per hour per visitor: each one creates a session row.
-  private readonly demoSignIns = new RateLimiter(10, 60 * 60_000);
+  // Demos started from the sign-in page, per visitor: each can create a client, a consultant and sample sessions.
+  private readonly demoStartsPerMinute = new RateLimiter(5, 60_000);
+  private readonly demoStartsPerHour = new RateLimiter(30, 60 * 60_000);
   // Each reset deletes and recreates a demo pair.
   private readonly demoResets = new RateLimiter(10, 60 * 60_000);
 
@@ -123,9 +124,17 @@ export class AuthController {
     @Body() dto: DemoDto,
     @Res({ passthrough: true }) res: Response,
   ) {
-    if (!this.demoSignIns.allow(req.ip ?? 'unknown'))
+    // Switching sides in the demo bar stays in the visitor's own demo, so only a start counts towards the limits.
+    const switching = demoIdOf(
+      await this.auth.emailFor(req.cookies?.[COOKIE]).catch(() => null),
+    );
+    const ip = req.ip ?? 'unknown';
+    if (
+      !switching &&
+      !(this.demoStartsPerMinute.allow(ip) && this.demoStartsPerHour.allow(ip))
+    )
       throw new HttpException(
-        'Too many demo sign-ins from this network. Please try again later.',
+        'Too many demos were started from this network recently. Please try again in a few minutes.',
         HttpStatus.TOO_MANY_REQUESTS,
       );
     // Switching sides replaces the current sign-in rather than piling up sessions (unused demos get cleaned up).

@@ -31,7 +31,8 @@ export default function DemoSignIn() {
     });
     if (!res.ok) {
       setBusy(null);
-      return setError("The demo isn't available right now.");
+      // Too many demos started from this network: the API's message says to wait.
+      return setError(res.status === 429 ? (await res.json()).message : "The demo isn't available right now.");
     }
     // A full page load, so the header and every page pick up the new session.
     window.location.href = role === "consultant" ? "/dashboard" : "/my-bookings";

@@ -55,3 +55,43 @@ describe('consultant dashboard', () => {
     expect(stats.earnedCents).toBe(40000);
   });
 });
+
+describe('demo sign-in limits', () => {
+  function demoController(signedInAs: string | null) {
+    const auth = {
+      emailFor: signedInAs
+        ? vi.fn().mockResolvedValue(signedInAs)
+        : vi.fn().mockRejectedValue(new Error('Not signed in')),
+      logout: vi.fn(),
+    };
+    const demos = {
+      start: vi.fn().mockResolvedValue({
+        sessionId: 's',
+        demoToken: 't',
+        role: 'client',
+      }),
+    };
+    const controller = new AuthController(
+      auth as never,
+      demos as never,
+      {} as never,
+      {} as never,
+    );
+    const res = { cookie: vi.fn() } as never;
+    const req = { ip: '1.2.3.4', cookies: {} } as never;
+    return (role: 'client' | 'consultant') =>
+      controller.demo(req, { role } as never, res);
+  }
+
+  it('allows five new demos a minute from one network', async () => {
+    const start = demoController(null);
+    for (let i = 0; i < 5; i++) await start('client');
+    await expect(start('client')).rejects.toMatchObject({ status: 429 });
+  });
+
+  it('never counts switching sides inside a demo', async () => {
+    const switchTo = demoController('demo-0123456789ab@consultly.test');
+    for (let i = 0; i < 12; i++)
+      await switchTo(i % 2 ? 'client' : 'consultant');
+  });
+});
