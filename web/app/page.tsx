@@ -101,7 +101,7 @@ export default function Home() {
       <section className="landing-showcase space-y-6 rounded-sm bg-band px-5 py-8 sm:px-8 sm:py-10">
         <h2 className="font-display text-3xl font-semibold tracking-tight">See it in action</h2>
         <figure className="landing-showcase-item space-y-3">
-          <Image src={timePickerShot} alt="A consultant's week of open times, with two sessions selected and a total of $300" className="rounded-sm border border-rule bg-sheet shadow-sm" />
+          <Image src={timePickerShot} alt="A consultant's week of open times, with two sessions selected and a total of $400" className="rounded-sm border border-rule bg-sheet shadow-sm" />
           <figcaption className="text-sm text-muted">Pick several times in your own time zone and pay once. Times are held while you check out.</figcaption>
         </figure>
         <div className="grid gap-8 sm:grid-cols-2">
