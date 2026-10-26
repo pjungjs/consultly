@@ -6,14 +6,15 @@ How to run Consultly on your machine, and how the live site is hosted for free. 
 
 You need Node 22+, Python with [uv](https://docs.astral.sh/uv/), PostgreSQL, and the [Stripe CLI](https://docs.stripe.com/stripe-cli).
 
-1. **Settings.** Copy each `.env.example` to `.env` in `api/`, `ai/` and `web/`, and fill in:
+1. **Settings.** Copy each `.env.example` to `api/.env`, `ai/.env` and `web/.env.local` (the name Next.js reads), then fill in:
    - `api/.env`: `DATABASE_URL` and the Stripe test keys.
    - `api/.env` (optional): `RESEND_API_KEY`. Without it, sign-in links are printed in the API's console.
    - `ai/.env` (optional): `ANTHROPIC_API_KEY`. Without it, briefs are stored but not summarised, and Help uses Demo answers.
 2. **Database:**
    ```bash
+   createdb consultly
    cd api && npm install
-   npx prisma migrate dev     # create the tables
+   npx prisma migrate deploy  # create the tables
    npx prisma db seed         # sample consultants and availability
    ```
 3. **Start the four processes**, each in its own terminal:
@@ -21,7 +22,8 @@ You need Node 22+, Python with [uv](https://docs.astral.sh/uv/), PostgreSQL, and
    cd api && npm run start:dev                                   # API on :4000
    cd ai  && uv sync && uv run uvicorn ai.main:app --port 8000 --reload   # AI service on :8000
    cd web && npm install && npm run dev                          # website on :3000
-   stripe listen --forward-to localhost:4000/stripe/webhook      # Stripe events to your machine
+   stripe listen --forward-to localhost:4000/stripe/webhook \
+     --events checkout.session.completed,checkout.session.expired   # Stripe events to your machine
    ```
    `stripe listen` prints a signing secret (`whsec_…`). Put it in `api/.env` as `STRIPE_WEBHOOK_SECRET` and restart the API. If `stripe listen` isn't running, payments succeed on Stripe's side but bookings stay "held" locally, because the webhook never arrives.
 4. **Demo sign-in:** set `DEMO_LOGIN=true` in `api/.env` to show **Explore as a client / consultant**.
@@ -102,7 +104,7 @@ Online, Stripe needs a public address to send "payment completed" to:
 ### 5. Check it works
 
 - Home, Find a consultant, a consultant profile and the FAQ load.
-- In My bookings, choose **Explore as a client**. Your demo consultant, Jason, is first in Find a consultant.
+- In My bookings, choose **Explore as a client**. Your demo consultant, Jason, is in Find a consultant with a "Your demo consultant" tag, and **Book your Demo consultant** in the demo bar opens his profile.
 - Book Jason with card `4242 4242 4242 4242`. The booking turns "Paid and booked", which proves the webhook works.
 - Cancel it from My bookings; the refund appears in Stripe.
 - Add a PDF brief: "Reading your brief…" turns into a prep sheet.
@@ -119,7 +121,7 @@ Online, Stripe needs a public address to send "payment completed" to:
   ```
 - **AI spending:** `AI_DAILY_CHAT_LIMIT` (200) and `AI_DAILY_BRIEF_LIMIT` (30) on Render, Live AI for signed-in users only, and the Anthropic monthly limit behind both.
 - **Email:** without a verified domain, Resend only delivers to the Resend account owner. Visitors use the demo accounts instead; other sends fail quietly and are logged.
-- **Supabase** pauses a free project after a week without activity. Any visit that reaches the database keeps it active.
+- **Supabase** pauses a free project after a week without database activity. The `Database check` GitHub Action (`.github/workflows/database-check.yml`) calls `/api/health/db` every 3 days, which keeps it active, and a failed run emails the repo owner. It can also be run by hand from the Actions tab.
 - **Rotating a secret:** change it in the host's settings and redeploy that service. For the shared `AI_SERVICE_TOKEN`, regenerate it in the Render environment group; both services pick it up on redeploy.
 
 ## Settings reference
