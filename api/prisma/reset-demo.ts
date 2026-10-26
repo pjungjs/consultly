@@ -10,8 +10,8 @@ const prisma = new PrismaClient({
   adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL }),
 });
 
-// Demo accounts live on the fake consultly.test domain: demo-<id>@ (client) and jason-<id>@ (consultant copy).
-const demoEmail = { endsWith: '@consultly.test' };
+// Demo accounts live on the fake consultly.test domain: demo-client-<id>@ and demo-consultant-<id>@.
+const demoEmail = { startsWith: 'demo-', endsWith: '@consultly.test' };
 
 async function main() {
   const copies = await prisma.consultant.findMany({
@@ -21,8 +21,7 @@ async function main() {
   const orders = await prisma.order.findMany({
     where: {
       OR: [
-        { clientEmail: { ...demoEmail, startsWith: 'demo' } },
-        { clientEmail: { ...demoEmail, startsWith: 'jason-' } },
+        { clientEmail: demoEmail },
         { consultantId: { in: copies.map((c) => c.id) } },
       ],
     },
@@ -33,13 +32,8 @@ async function main() {
     where: { id: { in: orders.map((o) => o.id) } },
   }); // bookings cascade
   await prisma.consultant.deleteMany({ where: { demoOwner: { not: null } } }); // hours and time off cascade
-  for (const where of [
-    { email: { ...demoEmail, startsWith: 'demo' } },
-    { email: { ...demoEmail, startsWith: 'jason-' } },
-  ]) {
-    await prisma.client.deleteMany({ where });
-    await prisma.session.deleteMany({ where });
-  }
+  await prisma.client.deleteMany({ where: { email: demoEmail } });
+  await prisma.session.deleteMany({ where: { email: demoEmail } });
   console.log(
     `Demo reset: removed ${copies.length} demo visitors and ${orders.length} demo orders.`,
   );

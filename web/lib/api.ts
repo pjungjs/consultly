@@ -192,11 +192,11 @@ export function takeCheckout(): string | null {
 }
 
 /** Demo accounts' made-up addresses (they can't receive email), so pages can leave them out. */
-export const isDemoEmail = (email: string) => /^(demo|jason)-[a-f0-9]{12}@consultly\.test$/i.test(email);
+export const isDemoEmail = (email: string) => /^demo-(client|consultant)-[a-f0-9]{12}@consultly\.test$/i.test(email);
 
 /** How to name the signed-in account: demo accounts have made-up addresses, so they're named by their side. */
 export const accountLabel = (email: string) =>
-  !isDemoEmail(email) ? email : /^demo-/i.test(email) ? "the Demo client" : "the Demo consultant";
+  !isDemoEmail(email) ? email : /^demo-client-/i.test(email) ? "the Demo client" : "the Demo consultant";
 
 /** Window event fired after a profile save, so the account menu can refresh without a page change. */
 export const PROFILE_UPDATED = "consultly:profile-updated";

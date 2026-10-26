@@ -11,8 +11,8 @@ describe("formatPrice", () => {
 
 describe("accountLabel", () => {
   it("names demo accounts by their side and shows real emails as they are", () => {
-    expect(accountLabel("demo-0123456789ab@consultly.test")).toBe("the Demo client");
-    expect(accountLabel("jason-0123456789ab@consultly.test")).toBe("the Demo consultant");
+    expect(accountLabel("demo-client-0123456789ab@consultly.test")).toBe("the Demo client");
+    expect(accountLabel("demo-consultant-0123456789ab@consultly.test")).toBe("the Demo consultant");
     expect(accountLabel("jason@consultly.test")).toBe("jason@consultly.test");
   });
 });

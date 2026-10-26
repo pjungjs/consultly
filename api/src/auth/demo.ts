@@ -14,18 +14,19 @@ export const DEMO_COOKIE = 'consultly_demo';
 export const demoIdFor = (token: string) => hashToken(token).slice(0, 12);
 
 export const demoAccounts = (id: string): Record<DemoRole, string> => ({
-  client: `demo-${id}@consultly.test`,
-  consultant: `jason-${id}@consultly.test`,
+  client: `demo-client-${id}@consultly.test`,
+  consultant: `demo-consultant-${id}@consultly.test`,
 });
 
-const DEMO_EMAIL = /^(?:demo|jason)-([a-f0-9]{12})@consultly\.test$/;
+const DEMO_EMAIL =
+  /^demo-(?:client|consultant)-([a-f0-9]{12})@consultly\.test$/;
 
 /** The demo visitor behind this email, or null for a real account. */
 export const demoIdOf = (email: string | null | undefined) =>
   email?.toLowerCase().match(DEMO_EMAIL)?.[1] ?? null;
 
 export const demoRoleOf = (email: string): DemoRole =>
-  email.toLowerCase().startsWith('demo-') ? 'client' : 'consultant';
+  email.toLowerCase().startsWith('demo-client-') ? 'client' : 'consultant';
 
 /** The demo client's name, on their profile and on every booking they make. */
 export const DEMO_CLIENT_NAME = 'Peter Parkinson';

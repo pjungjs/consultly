@@ -191,7 +191,7 @@ describe('session length', () => {
 describe('demo accounts', () => {
   it('edit their own private profiles, but cannot open a public consultant profile', async () => {
     const { controller, auth, prisma } = setup();
-    auth.emailFor.mockResolvedValue('demo-0123456789ab@consultly.test');
+    auth.emailFor.mockResolvedValue('demo-client-0123456789ab@consultly.test');
     auth.consultantFor.mockResolvedValue({ id: 'c1' });
     prisma.consultant.update.mockResolvedValue(row());
     await expect(

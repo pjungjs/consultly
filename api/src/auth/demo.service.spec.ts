@@ -125,7 +125,7 @@ describe('DemoService.reset', () => {
     prisma.consultant.findUnique
       .mockResolvedValueOnce({ id: 'copy1' })
       .mockResolvedValue(null);
-    await service.reset('demo-0123456789ab@consultly.test', 'America/New_York');
+    await service.reset('demo-client-0123456789ab@consultly.test', 'America/New_York');
     expect(prisma.order.deleteMany).toHaveBeenCalledWith({
       where: { id: { in: ['o1'] } },
     });

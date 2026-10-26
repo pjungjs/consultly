@@ -470,7 +470,7 @@ describe('OrdersService.create guardrails', () => {
   it('names demo bookings after the demo client, whatever name the demo account has', async () => {
     const { service, prisma } = setup();
     prisma.client.findUnique.mockResolvedValue({ name: 'Something rude' });
-    await service.create(dto() as never, 'demo-0123456789ab@consultly.test');
+    await service.create(dto() as never, 'demo-client-0123456789ab@consultly.test');
     expect(prisma.order.create.mock.calls[0][0].data.clientName).toBe(
       'Peter Parkinson',
     );
@@ -512,14 +512,14 @@ describe('who a booking is for', () => {
 describe("a demo visitor's private consultant", () => {
   const copy = {
     ...consultant,
-    email: 'jason-0123456789ab@consultly.test',
+    email: 'demo-consultant-0123456789ab@consultly.test',
     demoOwner: '0123456789ab',
   };
 
   it("is bookable by that visitor's demo client", async () => {
     const { service, consultants, prisma } = setup();
     consultants.get.mockResolvedValue(copy);
-    await service.create(dto() as never, 'demo-0123456789ab@consultly.test');
+    await service.create(dto() as never, 'demo-client-0123456789ab@consultly.test');
     expect(prisma.order.create).toHaveBeenCalled();
   });
 
@@ -529,7 +529,7 @@ describe("a demo visitor's private consultant", () => {
     for (const email of [
       null,
       'dana@example.com',
-      'demo-ffffffffffff@consultly.test',
+      'demo-client-ffffffffffff@consultly.test',
     ])
       await expect(
         service.create(dto() as never, email),
@@ -544,7 +544,7 @@ describe('cancelling a pre-made demo session', () => {
     const sample = booking({
       order: {
         ...booking().order,
-        clientEmail: 'demo-0123456789ab@consultly.test',
+        clientEmail: 'demo-client-0123456789ab@consultly.test',
         stripePaymentId: null,
         stripeSessionId: null,
       },
@@ -552,7 +552,7 @@ describe('cancelling a pre-made demo session', () => {
     prisma.booking.findUnique.mockResolvedValue(sample);
     prisma.booking.findUniqueOrThrow.mockResolvedValue(sample);
     await expect(
-      service.cancelByClient('b1', 'demo-0123456789ab@consultly.test'),
+      service.cancelByClient('b1', 'demo-client-0123456789ab@consultly.test'),
     ).resolves.toEqual({ cancelled: true, refundedCents: 20000 });
     expect(stripe.refunds.create).not.toHaveBeenCalled();
   });

@@ -90,7 +90,7 @@ describe('demo sign-in limits', () => {
   });
 
   it('never counts switching sides inside a demo', async () => {
-    const switchTo = demoController('demo-0123456789ab@consultly.test');
+    const switchTo = demoController('demo-client-0123456789ab@consultly.test');
     for (let i = 0; i < 12; i++)
       await switchTo(i % 2 ? 'client' : 'consultant');
   });
