@@ -18,6 +18,8 @@ services:
     healthCheckPath: /health
     envVars:
       - fromGroup: consultly-shared
+      - key: NODE_VERSION # major only: each build takes the newest 26.x, so security patches arrive with a redeploy
+        value: "26"
       - key: NODE_ENV
         value: production
       - key: DATABASE_URL # Supabase "Session pooler" connection string

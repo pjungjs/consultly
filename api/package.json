@@ -67,6 +67,6 @@
     "fsevents@2.3.3": true
   },
   "engines": {
-    "node": ">=22"
+    "node": ">=26.12.1"
   }
 }
