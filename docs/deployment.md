@@ -56,7 +56,8 @@ Stripe ── webhook ──▶ https://<api>.onrender.com/stripe/webhook   (str
 2. **Database address:** Connect → **Session pooler**. It works over IPv4, which Render needs. This is `DATABASE_URL`.
 3. **Storage:** create a bucket named `briefs` and keep it **Private**.
 4. **Keys:** Project Settings → API keys. Copy the project URL (`SUPABASE_URL`) and a **secret** key (`sb_secret_…`, or the legacy `service_role` key) for `SUPABASE_SERVICE_ROLE_KEY`. It bypasses all access rules, so it goes only into the API's settings on Render: never into the website or the repo.
-5. **Create the tables and sample data** once, from your machine:
+5. **Turn off the Data API:** Project Settings → Data API → switch off **Enable Data API**. Supabase turns it on for every new project. It publishes each table in the `public` schema as a web endpoint (`https://<project>.supabase.co/rest/v1/…`) for apps whose browser talks to the database directly. Its only guard is the anon key, which Supabase treats as public, so that setup depends on Row-Level Security (RLS) rules. Consultly doesn't work that way: the website calls the API on Render, and the API reads and writes through Prisma over the `DATABASE_URL` connection. Nothing uses the Data API, and the tables have no RLS. Left on, it lets anyone with the project URL and anon key read, change or delete every table, including sessions and login tokens. Supabase flags this as `rls_disabled_in_public`. Turning it off doesn't affect Prisma's connection or brief PDFs, which go through Storage (`/storage/v1`), a separate service.
+6. **Create the tables and sample data** once, from your machine:
    ```bash
    cd api
    DATABASE_URL="<session pooler address>" npx prisma migrate deploy
